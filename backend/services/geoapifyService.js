@@ -27,6 +27,12 @@ export const autocompletePlace = async (text) => {
     const url = `https://api.geoapify.com/v1/geocode/autocomplete?text=${encodeURIComponent(text)}&format=json&apiKey=${ENV.GEOAPIFY_API_KEY}`;
     const response = await axios.get(url, { timeout: 8000 });
 
+
+
+
+
+
+
     if (response.data && response.data.results) {
       const results = response.data.results.map((item) => ({
         formatted: item.formatted,
@@ -115,12 +121,23 @@ export const fetchRoadRoute = async (origin, destination) => {
     const response = await axios.get(url, { timeout: 10000 });
 
     const feature = response.data?.features?.[0];
-    if (!feature || !feature.geometry || !feature.geometry.coordinates) {
+    if (!feature || !feature.geometry) {
       throw new ApiError(404, 'No road route found between the specified locations');
     }
 
-    // Geoapify routing returns coordinates in [lon, lat] format
-    const coordinates = feature.geometry.coordinates; // [[lon, lat], ...]
+    // Geoapify routing returns MultiLineString or LineString with [lon, lat] coordinates
+    let coordinates = [];
+    if (feature.geometry.type === 'MultiLineString') {
+      // Flatten legs into a continuous single ordered array of [lon, lat] pairs
+      coordinates = feature.geometry.coordinates.flat(1);
+    } else if (feature.geometry.type === 'LineString') {
+      coordinates = feature.geometry.coordinates;
+    }
+
+    if (!coordinates || coordinates.length < 2) {
+      throw new ApiError(404, 'Invalid or empty road route geometry returned by routing provider');
+    }
+
     const distanceMeters = feature.properties?.distance || 0;
     const timeSeconds = feature.properties?.time || 0;
 

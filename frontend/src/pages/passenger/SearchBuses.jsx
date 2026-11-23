@@ -87,7 +87,7 @@ export const SearchBuses = () => {
                     setPickupCoords([item.lon, item.lat]);
                   }
                 }}
-                placeholder="e.g. Vijay Nagar"
+                
                 required
               />
             </div>
@@ -96,7 +96,7 @@ export const SearchBuses = () => {
               label="Final Destination"
               value={destination}
               onChange={(val) => setDestination(val)}
-              placeholder="e.g. Rau"
+            
               required
             />
 

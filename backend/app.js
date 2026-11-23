@@ -11,6 +11,7 @@ import authRoutes from './routes/authRoutes.js';
 import busRoutes from './routes/busRoutes.js';
 import routeRoutes from './routes/routeRoutes.js';
 import tripRoutes from './routes/tripRoutes.js';
+import tileRoutes from './routes/tileRoutes.js';
 
 const app = express();
 
@@ -28,6 +29,9 @@ app.use(
     credentials: true,
   })
 );
+
+// Map tile proxy (placed before API rate limiter so panning/zooming tiles are not throttled)
+app.use('/api/tiles', tileRoutes);
 
 // Body parsers
 app.use(express.json({ limit: '10mb' }));

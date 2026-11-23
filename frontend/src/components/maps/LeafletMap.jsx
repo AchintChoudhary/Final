@@ -35,20 +35,24 @@ const createPinIcon = (color = '#16A34A', label = '') => {
     className: 'custom-pin-marker',
     html: `
       <div style="display: flex; flex-direction: column; align-items: center;">
-        ${label ? `<span style="background: #0F172A; color: #FFFFFF; font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 4px; margin-bottom: 2px; white-space: nowrap; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">${label}</span>` : ''}
+        ${
+          label
+            ? `<span style="background: #0F172A; color: #FFFFFF; font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 4px; margin-bottom: 2px; white-space: nowrap; box-shadow: 0 2px 4px rgba(0,0,0,0.25);">${label}</span>`
+            : ''
+        }
         <div style="width: 22px; height: 22px; background: ${color}; border: 2.5px solid #FFFFFF; border-radius: 9999px; box-shadow: 0 2px 5px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center;">
           <div style="width: 6px; height: 6px; background: #FFFFFF; border-radius: 9999px;"></div>
         </div>
       </div>
     `,
-    iconSize: [30, 42],
-    iconAnchor: [15, label ? 38 : 11],
+    iconSize: [32, 44],
+    iconAnchor: [16, label ? 40 : 11],
     popupAnchor: [0, -25],
   });
 };
 
 export const LeafletMap = ({
-  center = [22.7196, 75.8577], // Default Indore
+  center = [22.7196, 75.8577], // Default Indore [lat, lng]
   zoom = 12,
   routeCoordinates = null, // GeoJSON LineString coordinates [[lng, lat], ...]
   origin = null, // { name, coordinates: [lng, lat] }
@@ -64,7 +68,7 @@ export const LeafletMap = ({
   const markersLayerRef = useRef(null);
   const polylineLayerRef = useRef(null);
 
-  // Initialize map
+  // Initialize map with backend Geoapify tile proxy
   useEffect(() => {
     if (!mapContainerRef.current) return;
 
@@ -73,15 +77,27 @@ export const LeafletMap = ({
         zoomControl: true,
       }).setView(center, zoom);
 
-      // Clean, light, modern transport tiles (CartoDB Positron / OSM)
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+      // Backend tile proxy using existing Geoapify key (without exposing key to frontend)
+      // Falls back automatically to OpenStreetMap if offline
+      const tileProxyUrl = '/api/tiles/{z}/{x}/{y}.png';
+
+      L.tileLayer(tileProxyUrl, {
+        attribution:
+          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://www.geoapify.com/">Geoapify</a>',
         maxZoom: 19,
+        minZoom: 2,
       }).addTo(map);
 
       markersLayerRef.current = L.layerGroup().addTo(map);
       polylineLayerRef.current = L.layerGroup().addTo(map);
       mapInstanceRef.current = map;
+
+      // Invalidate size on initial mount for responsive flex containers
+      setTimeout(() => {
+        if (mapInstanceRef.current) {
+          mapInstanceRef.current.invalidateSize();
+        }
+      }, 200);
     }
 
     return () => {
@@ -102,24 +118,46 @@ export const LeafletMap = ({
 
     const bounds = [];
 
-    // 1. Draw Route Polyline
-    if (routeCoordinates && routeCoordinates.length > 1) {
-      // Leaflet expects [lat, lng]
-      const latLngs = routeCoordinates.map((c) => [c[1], c[0]]);
-      const polyline = L.polyline(latLngs, {
+    // 1. Process & Draw Route Polyline
+    // Route coordinates can be either:
+    // - [[lng, lat], [lng, lat], ...] (GeoJSON 2D LineString coordinates)
+    // - [[[lng, lat], ...]] (GeoJSON MultiLineString coordinates)
+    // - GeoJSON geometry object { coordinates: [...] }
+    let rawCoords = routeCoordinates;
+    if (rawCoords && typeof rawCoords === 'object' && rawCoords.coordinates) {
+      rawCoords = rawCoords.coordinates;
+    }
+
+    let flatGeoJsonCoords = [];
+    if (Array.isArray(rawCoords) && rawCoords.length > 0) {
+      // Check if nested 3D array (MultiLineString legs)
+      if (Array.isArray(rawCoords[0]) && Array.isArray(rawCoords[0][0])) {
+        flatGeoJsonCoords = rawCoords.flat(1);
+      } else {
+        flatGeoJsonCoords = rawCoords;
+      }
+    }
+
+    // Convert GeoJSON [lng, lat] to Leaflet [lat, lng]
+    const validLatLngs = flatGeoJsonCoords
+      .filter((pt) => Array.isArray(pt) && pt.length >= 2 && !isNaN(pt[0]) && !isNaN(pt[1]))
+      .map((pt) => [Number(pt[1]), Number(pt[0])]);
+
+    if (validLatLngs.length > 1) {
+      L.polyline(validLatLngs, {
         color: '#1769F4',
         weight: 5,
-        opacity: 0.85,
+        opacity: 0.88,
         lineCap: 'round',
         lineJoin: 'round',
       }).addTo(polylineLayerRef.current);
 
-      latLngs.forEach((pt) => bounds.push(pt));
+      validLatLngs.forEach((pt) => bounds.push(pt));
     }
 
     // 2. Origin Marker (Green)
-    if (origin && origin.coordinates) {
-      const latLng = [origin.coordinates[1], origin.coordinates[0]];
+    if (origin && origin.coordinates && origin.coordinates.length >= 2) {
+      const latLng = [Number(origin.coordinates[1]), Number(origin.coordinates[0])];
       L.marker(latLng, { icon: createPinIcon('#16A34A', origin.name || 'Start') })
         .bindPopup(`<b>Start Location:</b><br/>${origin.name || 'Origin'}`)
         .addTo(markersLayerRef.current);
@@ -127,17 +165,17 @@ export const LeafletMap = ({
     }
 
     // 3. Destination Marker (Red)
-    if (destination && destination.coordinates) {
-      const latLng = [destination.coordinates[1], destination.coordinates[0]];
+    if (destination && destination.coordinates && destination.coordinates.length >= 2) {
+      const latLng = [Number(destination.coordinates[1]), Number(destination.coordinates[0])];
       L.marker(latLng, { icon: createPinIcon('#EF4444', destination.name || 'Destination') })
         .bindPopup(`<b>Destination:</b><br/>${destination.name || 'Destination'}`)
         .addTo(markersLayerRef.current);
       bounds.push(latLng);
     }
 
-    // 4. Passenger Pickup Marker (Green with pulse)
-    if (pickupLocation) {
-      const latLng = [pickupLocation[1], pickupLocation[0]];
+    // 4. Passenger Pickup Marker (Green)
+    if (pickupLocation && pickupLocation.length >= 2) {
+      const latLng = [Number(pickupLocation[1]), Number(pickupLocation[0])];
       L.marker(latLng, { icon: createPinIcon('#16A34A', 'Your Pickup') })
         .bindPopup('<b>Your Pickup Point</b>')
         .addTo(markersLayerRef.current);
@@ -147,8 +185,8 @@ export const LeafletMap = ({
     // 5. Intermediate Stops
     if (stops && stops.length > 0) {
       stops.forEach((stop) => {
-        if (stop.coordinates) {
-          const latLng = [stop.coordinates[1], stop.coordinates[0]];
+        if (stop.coordinates && stop.coordinates.length >= 2) {
+          const latLng = [Number(stop.coordinates[1]), Number(stop.coordinates[0])];
           L.marker(latLng, { icon: createPinIcon('#64748B', stop.name) })
             .bindPopup(`<b>Stop:</b> ${stop.name}`)
             .addTo(markersLayerRef.current);
@@ -158,20 +196,31 @@ export const LeafletMap = ({
     }
 
     // 6. Live Bus Marker
-    if (busLocation && busLocation.length === 2) {
-      const latLng = [busLocation[1], busLocation[0]];
+    if (busLocation && busLocation.length >= 2) {
+      const latLng = [Number(busLocation[1]), Number(busLocation[0])];
       L.marker(latLng, { icon: createBusIcon(true) })
         .bindPopup('<b>Active Bus Location</b>')
         .addTo(markersLayerRef.current);
       bounds.push(latLng);
     }
 
-    // Fit map bounds to view all elements
+    // 7. Auto-fit bounds to view the complete road route and markers
     if (bounds.length > 1) {
-      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
+      map.fitBounds(L.latLngBounds(bounds), {
+        padding: [40, 40],
+        maxZoom: 15,
+        animate: true,
+      });
     } else if (bounds.length === 1) {
       map.setView(bounds[0], 14);
     }
+
+    // Invalidate size to ensure responsive rendering across mobile and desktop
+    setTimeout(() => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.invalidateSize();
+      }
+    }, 150);
   }, [routeCoordinates, origin, destination, busLocation, stops, pickupLocation]);
 
   return (
