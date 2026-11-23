@@ -2,7 +2,7 @@ import { Bus } from '../models/Bus.js';
 import { ApiError } from '../utils/apiError.js';
 import { isValidPlateNumber, normalizePlateNumber } from '../utils/validators.js';
 
-// Create a new bus (Driver or Admin)
+// Create a new bus (Driver)
 export const createBus = async (req, res, next) => {
   try {
     const { busName, plateNumber, startLocation, finalDestination } = req.body;
@@ -27,7 +27,6 @@ export const createBus = async (req, res, next) => {
       driverId: req.user._id,
       startLocation: startLocation?.trim() || '',
       finalDestination: finalDestination?.trim() || '',
-      verificationStatus: 'VERIFIED',
     });
 
     res.status(201).json({
@@ -40,12 +39,10 @@ export const createBus = async (req, res, next) => {
   }
 };
 
-// Get buses owned by current driver
+// Get buses registered by current driver
 export const getMyBuses = async (req, res, next) => {
   try {
-    const buses = await Bus.find({
-      $or: [{ driverId: req.user._id }, { assignedDriver: req.user._id }],
-    }).sort({ createdAt: -1 });
+    const buses = await Bus.find({ driverId: req.user._id }).sort({ createdAt: -1 });
 
     res.status(200).json({
       success: true,
@@ -72,7 +69,7 @@ export const getBusById = async (req, res, next) => {
   }
 };
 
-// Update bus details
+// Update bus details (Owner Driver only)
 export const updateBus = async (req, res, next) => {
   try {
     const bus = await Bus.findById(req.params.id);
@@ -80,11 +77,8 @@ export const updateBus = async (req, res, next) => {
       throw new ApiError(404, 'Bus not found');
     }
 
-    if (
-      req.user.role !== 'ADMIN' &&
-      bus.driverId.toString() !== req.user._id.toString()
-    ) {
-      throw new ApiError(403, 'Unauthorized to edit this bus');
+    if (bus.driverId.toString() !== req.user._id.toString()) {
+      throw new ApiError(403, 'Unauthorized: You can only edit your own registered bus');
     }
 
     const { busName, startLocation, finalDestination, plateNumber } = req.body;
@@ -117,7 +111,7 @@ export const updateBus = async (req, res, next) => {
   }
 };
 
-// Delete bus
+// Delete bus (Owner Driver only)
 export const deleteBus = async (req, res, next) => {
   try {
     const bus = await Bus.findById(req.params.id);
@@ -125,11 +119,8 @@ export const deleteBus = async (req, res, next) => {
       throw new ApiError(404, 'Bus not found');
     }
 
-    if (
-      req.user.role !== 'ADMIN' &&
-      bus.driverId.toString() !== req.user._id.toString()
-    ) {
-      throw new ApiError(403, 'Unauthorized to delete this bus');
+    if (bus.driverId.toString() !== req.user._id.toString()) {
+      throw new ApiError(403, 'Unauthorized: You can only delete your own registered bus');
     }
 
     await Bus.findByIdAndDelete(req.params.id);

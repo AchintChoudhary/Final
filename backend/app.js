@@ -11,8 +11,6 @@ import authRoutes from './routes/authRoutes.js';
 import busRoutes from './routes/busRoutes.js';
 import routeRoutes from './routes/routeRoutes.js';
 import tripRoutes from './routes/tripRoutes.js';
-import adminRoutes from './routes/adminRoutes.js';
-import studentRoutes from './routes/studentRoutes.js';
 
 const app = express();
 
@@ -54,13 +52,11 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// API Routes
+// API Routes (Driver & Passenger Only)
 app.use('/api/auth', authRoutes);
 app.use('/api/buses', busRoutes);
 app.use('/api/routes', routeRoutes);
 app.use('/api/trips', tripRoutes);
-app.use('/api/admin', adminRoutes);
-app.use('/api/students', studentRoutes);
 
 // 404 Route handler
 app.use((req, res, next) => {

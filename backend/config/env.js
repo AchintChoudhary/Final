@@ -16,6 +16,4 @@ export const ENV = {
   GPS_MAX_ACCURACY_METERS: parseInt(process.env.GPS_MAX_ACCURACY_METERS, 10) || 100,
   ETA_REFRESH_INTERVAL_MS: parseInt(process.env.ETA_REFRESH_INTERVAL_MS, 10) || 60000,
   BCRYPT_SALT_ROUNDS: parseInt(process.env.BCRYPT_SALT_ROUNDS, 10) || 12,
-  ADMIN_EMAIL: process.env.ADMIN_EMAIL || 'admin@college.edu',
-  ADMIN_PASSWORD: process.env.ADMIN_PASSWORD || 'AdminPassword@123',
 };

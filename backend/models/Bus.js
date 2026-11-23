@@ -27,15 +27,6 @@ const busSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
-    verificationStatus: {
-      type: String,
-      enum: ['PENDING', 'VERIFIED', 'REJECTED'],
-      default: 'VERIFIED',
-    },
-    assignedDriver: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-    },
   },
   {
     timestamps: true,

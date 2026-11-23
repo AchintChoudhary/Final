@@ -3,15 +3,11 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import {
   Bus,
   User,
-  Shield,
   LayoutDashboard,
-  MapPin,
   Clock,
   Compass,
-  Users,
   LogOut,
   Navigation,
-  FileText,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -36,20 +32,11 @@ export const Sidebar = ({ role = 'DRIVER', onCloseMobile }) => {
       { to: '/passenger/search', label: 'Search Buses', icon: Compass },
       { to: '/passenger/history', label: 'My Trips', icon: Clock },
     ],
-    ADMIN: [
-      { to: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-      { to: '/admin/buses', label: 'Buses', icon: Bus },
-      { to: '/admin/drivers', label: 'Drivers', icon: Users },
-      { to: '/admin/routes', label: 'Routes', icon: MapPin },
-      { to: '/admin/students', label: 'Students', icon: FileText },
-      { to: '/admin/live-map', label: 'Live Map', icon: Navigation },
-    ],
   };
 
   const roleHeaders = {
     DRIVER: { label: 'Driver', icon: Bus },
     PASSENGER: { label: 'Passenger', icon: User },
-    ADMIN: { label: 'Admin', icon: Shield },
   };
 
   const currentRoleHeader = roleHeaders[role] || roleHeaders.DRIVER;

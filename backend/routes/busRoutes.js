@@ -11,10 +11,10 @@ import { requireRole } from '../middleware/roleMiddleware.js';
 
 const router = express.Router();
 
-router.post('/', protect, requireRole('DRIVER', 'ADMIN'), createBus);
-router.get('/my', protect, requireRole('DRIVER', 'ADMIN'), getMyBuses);
+router.post('/', protect, requireRole('DRIVER'), createBus);
+router.get('/my', protect, requireRole('DRIVER'), getMyBuses);
 router.get('/:id', protect, getBusById);
-router.patch('/:id', protect, requireRole('DRIVER', 'ADMIN'), updateBus);
-router.delete('/:id', protect, requireRole('DRIVER', 'ADMIN'), deleteBus);
+router.patch('/:id', protect, requireRole('DRIVER'), updateBus);
+router.delete('/:id', protect, requireRole('DRIVER'), deleteBus);
 
 export default router;

@@ -27,14 +27,9 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ['DRIVER', 'PASSENGER', 'ADMIN'],
+      enum: ['DRIVER', 'PASSENGER'],
       required: true,
       default: 'PASSENGER',
-    },
-    authorizationStatus: {
-      type: String,
-      enum: ['PENDING', 'ACTIVE', 'REVOKED'],
-      default: 'ACTIVE',
     },
   },
   {

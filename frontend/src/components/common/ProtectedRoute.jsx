@@ -11,9 +11,6 @@ export const ProtectedRoute = ({ children, allowedRoles = [] }) => {
   }
 
   if (!isAuthenticated) {
-    if (allowedRoles.includes('ADMIN')) {
-      return <Navigate to="/admin/login" replace />;
-    }
     if (allowedRoles.includes('DRIVER')) {
       return <Navigate to="/driver/login" replace />;
     }
@@ -21,8 +18,6 @@ export const ProtectedRoute = ({ children, allowedRoles = [] }) => {
   }
 
   if (allowedRoles.length > 0 && !allowedRoles.includes(user?.role)) {
-    // Redirect to respective dashboard
-    if (user?.role === 'ADMIN') return <Navigate to="/admin/dashboard" replace />;
     if (user?.role === 'DRIVER') return <Navigate to="/driver/dashboard" replace />;
     return <Navigate to="/passenger/search" replace />;
   }

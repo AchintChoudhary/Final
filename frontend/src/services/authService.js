@@ -16,11 +16,6 @@ export const authService = {
     return res.data;
   },
 
-  adminLogin: async (email, password) => {
-    const res = await api.post('/auth/admin/login', { email, password });
-    return res.data;
-  },
-
   getMe: async () => {
     const res = await api.get('/auth/me');
     return res.data;

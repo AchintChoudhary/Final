@@ -30,7 +30,7 @@ export const driverSignup = async (req, res, next) => {
     }
 
     const user = await User.create({
-      name,
+      name: name.trim(),
       mobile: cleanMobile,
       passwordHash: password,
       role: 'DRIVER',
@@ -69,7 +69,7 @@ export const passengerSignup = async (req, res, next) => {
     }
 
     const user = await User.create({
-      name,
+      name: name.trim(),
       mobile: cleanMobile,
       passwordHash: password,
       role: 'PASSENGER',
@@ -88,7 +88,7 @@ export const passengerSignup = async (req, res, next) => {
   }
 };
 
-// General User / Driver / Passenger Login (Mobile + Password)
+// User Login (Driver or Passenger using Mobile + Password)
 export const login = async (req, res, next) => {
   try {
     const { mobile, password } = req.body;
@@ -116,52 +116,6 @@ export const login = async (req, res, next) => {
       message: 'Login successful',
       token,
       user,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-// Admin Login (Email + Password)
-export const adminLogin = async (req, res, next) => {
-  try {
-    const { email, password } = req.body;
-
-    if (!email || !password) {
-      throw new ApiError(400, 'Email and password are required');
-    }
-
-    // Check if admin user exists in DB, or seed initial setup safely if matching ENV
-    let admin = await User.findOne({ email: email.toLowerCase().trim(), role: 'ADMIN' });
-
-    if (!admin && email.toLowerCase().trim() === ENV.ADMIN_EMAIL.toLowerCase().trim()) {
-      // First-time setup using ENV credentials
-      if (password === ENV.ADMIN_PASSWORD) {
-        admin = await User.create({
-          name: 'Administrator',
-          email: ENV.ADMIN_EMAIL.toLowerCase().trim(),
-          passwordHash: ENV.ADMIN_PASSWORD,
-          role: 'ADMIN',
-        });
-      }
-    }
-
-    if (!admin) {
-      throw new ApiError(401, 'Invalid admin email or password');
-    }
-
-    const isMatch = await admin.comparePassword(password);
-    if (!isMatch) {
-      throw new ApiError(401, 'Invalid admin email or password');
-    }
-
-    const token = generateToken(admin._id, admin.role);
-
-    res.status(200).json({
-      success: true,
-      message: 'Admin login successful',
-      token,
-      user: admin,
     });
   } catch (error) {
     next(error);

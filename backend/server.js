@@ -2,9 +2,8 @@ import http from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import app from './app.js';
 import { ENV } from './config/env.js';
-import { connectDB, getDBConnectionStatus } from './config/db.js';
+import { connectDB } from './config/db.js';
 import { setupSocketIO } from './sockets/socketHandler.js';
-import { User } from './models/User.js';
 
 const server = http.createServer(app);
 
@@ -21,32 +20,12 @@ app.set('io', io);
 setupSocketIO(io);
 
 const startServer = async () => {
-  // Listen immediately
   server.listen(ENV.PORT, () => {
     console.log(`[Server] Real-Time Public Transport Backend running on port ${ENV.PORT} (${ENV.NODE_ENV})`);
     console.log(`[Server] API Health check available at http://localhost:${ENV.PORT}/api/health`);
   });
 
-  // Attempt database connection
-  const dbConnected = await connectDB();
-
-  // Create initial admin account if MongoDB is connected and credentials provided
-  if (dbConnected) {
-    try {
-      const existingAdmin = await User.findOne({ role: 'ADMIN' });
-      if (!existingAdmin && ENV.ADMIN_EMAIL && ENV.ADMIN_PASSWORD) {
-        await User.create({
-          name: 'Administrator',
-          email: ENV.ADMIN_EMAIL.toLowerCase().trim(),
-          passwordHash: ENV.ADMIN_PASSWORD,
-          role: 'ADMIN',
-        });
-        console.log(`[Admin] Initialized admin user: ${ENV.ADMIN_EMAIL}`);
-      }
-    } catch (err) {
-      console.warn('[Admin Setup Warning] Could not ensure default admin:', err.message);
-    }
-  }
+  await connectDB();
 };
 
 startServer();

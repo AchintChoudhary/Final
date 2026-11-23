@@ -14,7 +14,6 @@ export const setupSocketIO = (io) => {
         socket.handshake.headers?.authorization?.replace('Bearer ', '');
 
       if (!token) {
-        // Allow unauthenticated passengers to join public trip tracking rooms in read-only mode
         socket.user = null;
         return next();
       }
@@ -26,7 +25,6 @@ export const setupSocketIO = (io) => {
       }
       next();
     } catch (err) {
-      // Allow read-only connection even if token fails, but without user identity
       socket.user = null;
       next();
     }
@@ -39,7 +37,6 @@ export const setupSocketIO = (io) => {
       const room = `trip:${tripId}`;
       socket.join(room);
 
-      // Send immediate current state
       try {
         const trip = await Trip.findById(tripId).select(
           'status currentLocation routeProgressKm trackingStatus lastLocationUpdatedAt'
@@ -69,7 +66,7 @@ export const setupSocketIO = (io) => {
     // Driver sends live GPS location update
     socket.on('driver:location', async (data) => {
       try {
-        const { tripId, latitude, longitude, accuracy, sequence, timestamp } = data;
+        const { tripId, latitude, longitude, accuracy, sequence } = data;
 
         if (!socket.user || socket.user.role !== 'DRIVER') {
           return socket.emit('error', { message: 'Authentication as Driver required to send GPS' });
@@ -93,7 +90,7 @@ export const setupSocketIO = (io) => {
           return;
         }
 
-        // Broadcast to all passengers and admins tracking this trip
+        // Broadcast to all passengers tracking this trip
         io.to(`trip:${tripId}`).emit('trip:locationUpdated', {
           tripId,
           coordinates: result.coordinates, // [lng, lat]
@@ -102,24 +99,9 @@ export const setupSocketIO = (io) => {
           lastLocationUpdatedAt: result.lastLocationUpdatedAt,
           accuracy,
         });
-
-        // Also broadcast to admin live map room
-        io.to('admin:live').emit('admin:busLocationUpdated', {
-          tripId,
-          coordinates: result.coordinates,
-          trackingStatus: result.trackingStatus,
-          lastLocationUpdatedAt: result.lastLocationUpdatedAt,
-        });
       } catch (error) {
         console.error('[Socket driver:location error]', error.message);
         socket.emit('error', { message: error.message });
-      }
-    });
-
-    // Admin joins global live room
-    socket.on('admin:joinLive', () => {
-      if (socket.user && socket.user.role === 'ADMIN') {
-        socket.join('admin:live');
       }
     });
 
@@ -167,7 +149,7 @@ export const setupSocketIO = (io) => {
         });
       }
     } catch (err) {
-      // background check quiet catch
+      // quiet catch
     }
   }, 15000);
 };

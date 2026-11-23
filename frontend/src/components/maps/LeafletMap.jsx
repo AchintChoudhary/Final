@@ -55,7 +55,6 @@ export const LeafletMap = ({
   destination = null, // { name, coordinates: [lng, lat] }
   busLocation = null, // [lng, lat]
   stops = [], // array of { name, coordinates: [lng, lat], order }
-  buses = [], // for admin live map: array of { tripId, busName, plateNumber, coordinates: [lng, lat] }
   pickupLocation = null, // [lng, lat]
   height = '400px',
   className = '',
@@ -167,32 +166,13 @@ export const LeafletMap = ({
       bounds.push(latLng);
     }
 
-    // 7. Multiple Buses (for Admin Live Map)
-    if (buses && buses.length > 0) {
-      buses.forEach((b) => {
-        if (b.coordinates) {
-          const latLng = [b.coordinates[1], b.coordinates[0]];
-          L.marker(latLng, { icon: createBusIcon(b.trackingStatus === 'ONLINE') })
-            .bindPopup(`
-              <div style="font-family: inherit; font-size: 13px;">
-                <b style="color: #0F172A;">${b.busName}</b><br/>
-                <span style="color: #64748B;">Plate: ${b.plateNumber}</span><br/>
-                <span style="color: #64748B;">Route: ${b.routeName || 'Active Route'}</span>
-              </div>
-            `)
-            .addTo(markersLayerRef.current);
-          bounds.push(latLng);
-        }
-      });
-    }
-
     // Fit map bounds to view all elements
     if (bounds.length > 1) {
       map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
     } else if (bounds.length === 1) {
       map.setView(bounds[0], 14);
     }
-  }, [routeCoordinates, origin, destination, busLocation, stops, buses, pickupLocation]);
+  }, [routeCoordinates, origin, destination, busLocation, stops, pickupLocation]);
 
   return (
     <div

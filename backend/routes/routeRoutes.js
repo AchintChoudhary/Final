@@ -13,7 +13,7 @@ const router = express.Router();
 
 router.get('/autocomplete', autocomplete);
 router.get('/preview', previewRoute);
-router.post('/', protect, requireRole('DRIVER', 'ADMIN'), createRoute);
+router.post('/', protect, requireRole('DRIVER'), createRoute);
 router.get('/:id', getRouteById);
 router.get('/', getAllRoutes);
 

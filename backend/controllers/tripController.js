@@ -193,18 +193,17 @@ export const getTripEta = async (req, res, next) => {
   }
 };
 
-// Trip history
+// Trip history (Driver only sees their own trips)
 export const getTripHistory = async (req, res, next) => {
   try {
-    const filter = { status: { $in: ['COMPLETED', 'CANCELLED'] } };
-    if (req.user.role === 'DRIVER') {
-      filter.driverId = req.user._id;
-    }
+    const filter = {
+      driverId: req.user._id,
+      status: { $in: ['COMPLETED', 'CANCELLED'] },
+    };
 
     const trips = await Trip.find(filter)
       .populate('busId')
       .populate('routeId')
-      .populate('driverId', 'name mobile')
       .sort({ endedAt: -1 })
       .limit(50);
 

@@ -48,12 +48,6 @@ export const AuthProvider = ({ children }) => {
     return res.user;
   };
 
-  const adminLogin = async (email, password) => {
-    const res = await authService.adminLogin(email, password);
-    saveAuth(res);
-    return res.user;
-  };
-
   const driverSignup = async (data) => {
     const res = await authService.driverSignup(data);
     saveAuth(res);
@@ -81,7 +75,6 @@ export const AuthProvider = ({ children }) => {
         loading,
         role: user?.role || null,
         login,
-        adminLogin,
         driverSignup,
         passengerSignup,
         logout,

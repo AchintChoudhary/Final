@@ -14,10 +14,10 @@ import { requireRole } from '../middleware/roleMiddleware.js';
 const router = express.Router();
 
 router.post('/start', protect, requireRole('DRIVER'), startTrip);
-router.post('/:id/stop', protect, requireRole('DRIVER', 'ADMIN'), stopTrip);
+router.post('/:id/stop', protect, requireRole('DRIVER'), stopTrip);
 router.get('/my-active', protect, requireRole('DRIVER'), getMyActiveTrip);
+router.get('/history', protect, requireRole('DRIVER'), getTripHistory);
 router.get('/search', searchBuses);
-router.get('/history', protect, getTripHistory);
 router.get('/:id', getTripById);
 router.get('/:id/eta', getTripEta);
 
