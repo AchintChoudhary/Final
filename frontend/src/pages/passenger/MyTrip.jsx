@@ -44,12 +44,16 @@ export const MyTrip = () => {
 
   const bus = trip?.busId;
   const route = trip?.routeId;
-  const stops = route?.stops && route.stops.length > 0 ? route.stops : [
-    { name: route?.origin?.name || 'Origin', progressKm: 0, order: 0 },
-    { name: pickupName || 'Pickup Stop', progressKm: (route?.totalDistanceKm || 50) * 0.4, order: 1 },
-    { name: 'Intermediate Stop', progressKm: (route?.totalDistanceKm || 50) * 0.7, order: 2 },
-    { name: route?.destination?.name || destName || 'Destination', progressKm: route?.totalDistanceKm || 50, order: 3 },
-  ];
+  const stops =
+    route?.stops && route.stops.length > 0
+      ? route.stops
+      : [
+          ...(route?.origin ? [{ name: route.origin.name || 'Origin', progressKm: 0, order: 0 }] : []),
+          ...(pickupName && pickupName !== route?.origin?.name && pickupName !== route?.destination?.name
+            ? [{ name: pickupName, progressKm: (route?.totalDistanceKm || 0) * 0.5, order: 1 }]
+            : []),
+          ...(route?.destination ? [{ name: route.destination.name || destName || 'Destination', progressKm: route?.totalDistanceKm || 0, order: 2 }] : []),
+        ];
 
   const currentBusProgress = trip?.routeProgressKm || 0;
 

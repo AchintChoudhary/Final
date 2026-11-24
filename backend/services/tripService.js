@@ -38,24 +38,36 @@ export class TripService {
     }
 
     // 5. Initial coordinates and route progress
-    let startLocation = null;
-    let initialProgress = 0;
+    // Require valid real GPS coordinates from device; do not fallback to route origin
+    if (
+      !initialCoords ||
+      !Array.isArray(initialCoords) ||
+      initialCoords.length !== 2 ||
+      typeof initialCoords[0] !== 'number' ||
+      typeof initialCoords[1] !== 'number' ||
+      isNaN(initialCoords[0]) ||
+      isNaN(initialCoords[1])
+    ) {
+      throw new ApiError(
+        400,
+        'Valid device GPS coordinates [longitude, latitude] are required to start a trip'
+      );
+    }
 
-    if (initialCoords && Array.isArray(initialCoords) && initialCoords.length === 2) {
-      startLocation = {
-        type: 'Point',
-        coordinates: initialCoords, // [lng, lat]
-      };
-      const proj = projectPointOnRoute(initialCoords, route.geometry.coordinates);
-      if (proj) {
-        initialProgress = proj.progressKm;
-      }
-    } else {
-      // Default to route origin coordinates
-      startLocation = {
-        type: 'Point',
-        coordinates: route.origin.coordinates,
-      };
+    const [lng, lat] = initialCoords;
+    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      throw new ApiError(400, 'GPS coordinates are out of valid range [-90 to 90 lat, -180 to 180 lng]');
+    }
+
+    const startLocation = {
+      type: 'Point',
+      coordinates: [lng, lat],
+    };
+
+    let initialProgress = 0;
+    const proj = projectPointOnRoute([lng, lat], route.geometry.coordinates);
+    if (proj) {
+      initialProgress = proj.progressKm;
     }
 
     const trip = await Trip.create({

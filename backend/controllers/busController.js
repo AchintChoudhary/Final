@@ -1,4 +1,5 @@
 import { Bus } from '../models/Bus.js';
+import { Trip } from '../models/Trip.js';
 import { ApiError } from '../utils/apiError.js';
 import { isValidPlateNumber, normalizePlateNumber } from '../utils/validators.js';
 
@@ -121,6 +122,15 @@ export const deleteBus = async (req, res, next) => {
 
     if (bus.driverId.toString() !== req.user._id.toString()) {
       throw new ApiError(403, 'Unauthorized: You can only delete your own registered bus');
+    }
+
+    // Safeguard: Prevent deleting a bus that currently has an active trip in progress
+    const activeTrip = await Trip.findOne({ busId: req.params.id, status: 'ACTIVE' });
+    if (activeTrip) {
+      throw new ApiError(
+        400,
+        'Cannot delete a bus that is currently on an active trip. Complete or stop the active trip first.'
+      );
     }
 
     await Bus.findByIdAndDelete(req.params.id);

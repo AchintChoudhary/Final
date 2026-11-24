@@ -42,8 +42,8 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const login = async (mobile, password) => {
-    const res = await authService.login(mobile, password);
+  const login = async (mobile, password, role) => {
+    const res = await authService.login(mobile, password, role);
     saveAuth(res);
     return res.user;
   };

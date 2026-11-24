@@ -17,7 +17,7 @@ export const Sidebar = ({ role = 'DRIVER', onCloseMobile }) => {
 
   const handleLogout = () => {
     logout();
-    navigate('/');
+    navigate('/login');
     if (onCloseMobile) onCloseMobile();
   };
 

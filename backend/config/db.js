@@ -10,15 +10,15 @@ export const connectDB = async () => {
   if (isConnected) return true;
   try {
     const conn = await mongoose.connect(ENV.MONGODB_URI, {
-      serverSelectionTimeoutMS: 4000,
+      serverSelectionTimeoutMS: 5000,
     });
     isConnected = true;
-    console.log(`[Database] MongoDB connected: ${conn.connection.host}/${conn.connection.name}`);
+    console.log(`[Database] MongoDB connected successfully to host: ${conn.connection.host}`);
     return true;
   } catch (error) {
     isConnected = false;
-    console.warn(`[Database Warning] Could not connect to MongoDB at ${ENV.MONGODB_URI}: ${error.message}`);
-    console.warn('[Database] For full MongoDB Atlas storage, configure MONGODB_URI in backend/.env');
+    // Log error message without exposing connection strings or credentials
+    console.warn(`[Database Warning] Could not connect to MongoDB: ${error.message}`);
     return false;
   }
 };

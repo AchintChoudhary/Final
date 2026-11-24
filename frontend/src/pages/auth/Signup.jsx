@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Bus, User, Phone } from 'lucide-react';
 import { AuthLayout } from '../../components/layout/AuthLayout';
 import { InputField } from '../../components/common/InputField';
@@ -7,7 +7,11 @@ import { PasswordInput } from '../../components/common/PasswordInput';
 import { PrimaryButton } from '../../components/common/PrimaryButton';
 import { useAuth } from '../../context/AuthContext';
 
-export const DriverSignup = () => {
+export const Signup = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialRole = searchParams.get('role')?.toUpperCase() === 'DRIVER' ? 'DRIVER' : 'PASSENGER';
+
+  const [role, setRole] = useState(initialRole);
   const [name, setName] = useState('');
   const [mobile, setMobile] = useState('');
   const [password, setPassword] = useState('');
@@ -15,8 +19,14 @@ export const DriverSignup = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const { driverSignup } = useAuth();
+  const { driverSignup, passengerSignup } = useAuth();
   const navigate = useNavigate();
+
+  const handleRoleChange = (newRole) => {
+    setRole(newRole);
+    setError('');
+    setSearchParams({ role: newRole.toLowerCase() });
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -25,7 +35,8 @@ export const DriverSignup = () => {
     if (!name.trim()) {
       return setError('Please enter your full name');
     }
-    if (!mobile.trim() || mobile.replace(/\D/g, '').length < 10) {
+    const cleanDigits = mobile.replace(/\D/g, '');
+    if (cleanDigits.length < 10) {
       return setError('Please enter a valid 10-digit mobile number');
     }
     if (password.length < 6) {
@@ -37,24 +48,60 @@ export const DriverSignup = () => {
 
     setLoading(true);
     try {
-      await driverSignup({ name, mobile, password });
-      navigate('/driver/dashboard');
+      const payload = { name: name.trim(), mobile: cleanDigits, password };
+      if (role === 'DRIVER') {
+        await driverSignup(payload);
+        navigate('/driver/dashboard');
+      } else {
+        await passengerSignup(payload);
+        navigate('/passenger/search');
+      }
     } catch (err) {
-      setError(err.response?.data?.message || 'Signup failed. Please try again.');
+      setError(err.response?.data?.message || 'Signup failed. Please check your details and try again.');
     } finally {
       setLoading(false);
     }
   };
 
+  const isDriver = role === 'DRIVER';
+
   return (
     <AuthLayout
-      icon={Bus}
-      title="Driver Signup"
-      subtitle="Create your account to start"
+      icon={isDriver ? Bus : User}
+      title={isDriver ? 'Driver Signup' : 'Passenger Signup'}
+      subtitle={isDriver ? 'Create your account to start' : 'Join to track buses'}
       footerText="Already have an account?"
       footerLinkText="Login"
-      footerLinkTo="/driver/login"
+      footerLinkTo={`/login?role=${role.toLowerCase()}`}
     >
+      {/* Role Segmented Switch */}
+      <div className="mb-6 p-1 bg-[#F1F5F9] rounded-xl flex items-center">
+        <button
+          type="button"
+          onClick={() => handleRoleChange('PASSENGER')}
+          className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center space-x-1.5 ${
+            !isDriver
+              ? 'bg-white text-[#1769F4] shadow-xs'
+              : 'text-[#64748B] hover:text-[#0F172A]'
+          }`}
+        >
+          <User size={15} />
+          <span>Passenger</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => handleRoleChange('DRIVER')}
+          className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center space-x-1.5 ${
+            isDriver
+              ? 'bg-white text-[#1769F4] shadow-xs'
+              : 'text-[#64748B] hover:text-[#0F172A]'
+          }`}
+        >
+          <Bus size={15} />
+          <span>Driver</span>
+        </button>
+      </div>
+
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
           <div className="p-3 text-xs font-medium text-[#EF4444] bg-[#FEE2E2] rounded-lg border border-[#FECACA]">
@@ -94,7 +141,7 @@ export const DriverSignup = () => {
         <PasswordInput
           label="Confirm Password"
           id="confirmPassword"
-          placeholder="Confirm password"
+          placeholder="Confirm your password"
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
           required

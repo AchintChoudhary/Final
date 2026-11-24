@@ -12,9 +12,9 @@ export const ProtectedRoute = ({ children, allowedRoles = [] }) => {
 
   if (!isAuthenticated) {
     if (allowedRoles.includes('DRIVER')) {
-      return <Navigate to="/driver/login" replace />;
+      return <Navigate to="/login?role=driver" replace />;
     }
-    return <Navigate to="/passenger/login" replace />;
+    return <Navigate to="/login?role=passenger" replace />;
   }
 
   if (allowedRoles.length > 0 && !allowedRoles.includes(user?.role)) {

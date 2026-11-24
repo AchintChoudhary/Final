@@ -3,12 +3,11 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { ProtectedRoute } from './components/common/ProtectedRoute';
 
-// Home / Role Selection
-import { Home } from './pages/Home';
+// Unified Auth Screens
+import { Login } from './pages/auth/Login';
+import { Signup } from './pages/auth/Signup';
 
 // Driver Screens
-import { DriverSignup } from './pages/driver/DriverSignup';
-import { DriverLogin } from './pages/driver/DriverLogin';
 import { DriverDashboard } from './pages/driver/DriverDashboard';
 import { AddBusDetails } from './pages/driver/AddBusDetails';
 import { RoutePreview } from './pages/driver/RoutePreview';
@@ -16,8 +15,6 @@ import { ActiveTrip } from './pages/driver/ActiveTrip';
 import { DriverHistory } from './pages/driver/DriverHistory';
 
 // Passenger Screens
-import { PassengerSignup } from './pages/passenger/PassengerSignup';
-import { PassengerLogin } from './pages/passenger/PassengerLogin';
 import { SearchBuses } from './pages/passenger/SearchBuses';
 import { AvailableBuses } from './pages/passenger/AvailableBuses';
 import { LiveTracking } from './pages/passenger/LiveTracking';
@@ -29,12 +26,20 @@ export default function App() {
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          {/* Landing Role Selection */}
-          <Route path="/" element={<Home />} />
+          {/* Landing: Redirect straight to Unified Login */}
+          <Route path="/" element={<Navigate to="/login" replace />} />
+
+          {/* Unified Authentication */}
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Signup />} />
+
+          {/* Legacy Auth Redirects */}
+          <Route path="/driver/login" element={<Navigate to="/login?role=driver" replace />} />
+          <Route path="/driver/signup" element={<Navigate to="/signup?role=driver" replace />} />
+          <Route path="/passenger/login" element={<Navigate to="/login?role=passenger" replace />} />
+          <Route path="/passenger/signup" element={<Navigate to="/signup?role=passenger" replace />} />
 
           {/* DRIVER ROUTES */}
-          <Route path="/driver/signup" element={<DriverSignup />} />
-          <Route path="/driver/login" element={<DriverLogin />} />
           <Route
             path="/driver/dashboard"
             element={
@@ -77,8 +82,6 @@ export default function App() {
           />
 
           {/* PASSENGER ROUTES */}
-          <Route path="/passenger/signup" element={<PassengerSignup />} />
-          <Route path="/passenger/login" element={<PassengerLogin />} />
           <Route
             path="/passenger/search"
             element={
@@ -121,7 +124,7 @@ export default function App() {
           />
 
           {/* Catch-all fallback */}
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

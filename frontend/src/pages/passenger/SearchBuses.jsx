@@ -7,8 +7,8 @@ import { PrimaryButton } from '../../components/common/PrimaryButton';
 import { useGeolocation } from '../../hooks/useGeolocation';
 
 export const SearchBuses = () => {
-  const [pickup, setPickup] = useState();
-  const [destination, setDestination] = useState();
+  const [pickup, setPickup] = useState('');
+  const [destination, setDestination] = useState('');
   const [pickupCoords, setPickupCoords] = useState(null);
   const [locating, setLocating] = useState(false);
   const [error, setError] = useState('');

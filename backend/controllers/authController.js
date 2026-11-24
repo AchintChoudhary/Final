@@ -88,10 +88,10 @@ export const passengerSignup = async (req, res, next) => {
   }
 };
 
-// User Login (Driver or Passenger using Mobile + Password)
+// User Login (Driver or Passenger using Mobile + Password, with role validation)
 export const login = async (req, res, next) => {
   try {
-    const { mobile, password } = req.body;
+    const { mobile, password, role } = req.body;
 
     if (!mobile || !password) {
       throw new ApiError(400, 'Mobile number and password are required');
@@ -107,6 +107,18 @@ export const login = async (req, res, next) => {
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
       throw new ApiError(401, 'Invalid mobile number or password');
+    }
+
+    // Validate that user is logging into their actual registered role
+    if (role) {
+      const normalizedRole = role.toUpperCase();
+      if (user.role !== normalizedRole) {
+        const expectedRoleName = user.role === 'DRIVER' ? 'Driver' : 'Passenger';
+        throw new ApiError(
+          403,
+          `This account is registered as a ${expectedRoleName}. Please switch to the ${expectedRoleName} tab to log in.`
+        );
+      }
     }
 
     const token = generateToken(user._id, user.role);

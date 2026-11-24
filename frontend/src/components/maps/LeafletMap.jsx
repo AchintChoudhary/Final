@@ -65,10 +65,10 @@ export const LeafletMap = ({
 }) => {
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
-  const markersLayerRef = useRef(null);
-  const polylineLayerRef = useRef(null);
+  const staticLayerRef = useRef(null);
+  const busMarkerRef = useRef(null);
 
-  // Initialize map with backend Geoapify tile proxy
+  // Initialize Map and TileLayer
   useEffect(() => {
     if (!mapContainerRef.current) return;
 
@@ -77,19 +77,24 @@ export const LeafletMap = ({
         zoomControl: true,
       }).setView(center, zoom);
 
-      // Backend tile proxy using existing Geoapify key (without exposing key to frontend)
-      // Falls back automatically to OpenStreetMap if offline
+      // Backend tile proxy using existing Geoapify key with fallback
       const tileProxyUrl = '/api/tiles/{z}/{x}/{y}.png';
 
-      L.tileLayer(tileProxyUrl, {
+      const tileLayer = L.tileLayer(tileProxyUrl, {
         attribution:
           '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://www.geoapify.com/">Geoapify</a>',
         maxZoom: 19,
         minZoom: 2,
-      }).addTo(map);
+      });
 
-      markersLayerRef.current = L.layerGroup().addTo(map);
-      polylineLayerRef.current = L.layerGroup().addTo(map);
+      // Handle tile error gracefully
+      tileLayer.on('tileerror', (e) => {
+        console.warn('[LeafletMap] Tile load error:', e.coords);
+      });
+
+      tileLayer.addTo(map);
+
+      staticLayerRef.current = L.layerGroup().addTo(map);
       mapInstanceRef.current = map;
 
       // Invalidate size on initial mount for responsive flex containers
@@ -104,25 +109,21 @@ export const LeafletMap = ({
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
+        busMarkerRef.current = null;
+        staticLayerRef.current = null;
       }
     };
   }, []);
 
-  // Update Route Polyline & Markers
+  // Update Route Polyline & Static Markers (Fits bounds ONLY when route/stops change)
   useEffect(() => {
     const map = mapInstanceRef.current;
-    if (!map || !markersLayerRef.current || !polylineLayerRef.current) return;
+    if (!map || !staticLayerRef.current) return;
 
-    markersLayerRef.current.clearLayers();
-    polylineLayerRef.current.clearLayers();
-
+    staticLayerRef.current.clearLayers();
     const bounds = [];
 
     // 1. Process & Draw Route Polyline
-    // Route coordinates can be either:
-    // - [[lng, lat], [lng, lat], ...] (GeoJSON 2D LineString coordinates)
-    // - [[[lng, lat], ...]] (GeoJSON MultiLineString coordinates)
-    // - GeoJSON geometry object { coordinates: [...] }
     let rawCoords = routeCoordinates;
     if (rawCoords && typeof rawCoords === 'object' && rawCoords.coordinates) {
       rawCoords = rawCoords.coordinates;
@@ -130,7 +131,6 @@ export const LeafletMap = ({
 
     let flatGeoJsonCoords = [];
     if (Array.isArray(rawCoords) && rawCoords.length > 0) {
-      // Check if nested 3D array (MultiLineString legs)
       if (Array.isArray(rawCoords[0]) && Array.isArray(rawCoords[0][0])) {
         flatGeoJsonCoords = rawCoords.flat(1);
       } else {
@@ -150,7 +150,7 @@ export const LeafletMap = ({
         opacity: 0.88,
         lineCap: 'round',
         lineJoin: 'round',
-      }).addTo(polylineLayerRef.current);
+      }).addTo(staticLayerRef.current);
 
       validLatLngs.forEach((pt) => bounds.push(pt));
     }
@@ -160,7 +160,7 @@ export const LeafletMap = ({
       const latLng = [Number(origin.coordinates[1]), Number(origin.coordinates[0])];
       L.marker(latLng, { icon: createPinIcon('#16A34A', origin.name || 'Start') })
         .bindPopup(`<b>Start Location:</b><br/>${origin.name || 'Origin'}`)
-        .addTo(markersLayerRef.current);
+        .addTo(staticLayerRef.current);
       bounds.push(latLng);
     }
 
@@ -169,7 +169,7 @@ export const LeafletMap = ({
       const latLng = [Number(destination.coordinates[1]), Number(destination.coordinates[0])];
       L.marker(latLng, { icon: createPinIcon('#EF4444', destination.name || 'Destination') })
         .bindPopup(`<b>Destination:</b><br/>${destination.name || 'Destination'}`)
-        .addTo(markersLayerRef.current);
+        .addTo(staticLayerRef.current);
       bounds.push(latLng);
     }
 
@@ -178,7 +178,7 @@ export const LeafletMap = ({
       const latLng = [Number(pickupLocation[1]), Number(pickupLocation[0])];
       L.marker(latLng, { icon: createPinIcon('#16A34A', 'Your Pickup') })
         .bindPopup('<b>Your Pickup Point</b>')
-        .addTo(markersLayerRef.current);
+        .addTo(staticLayerRef.current);
       bounds.push(latLng);
     }
 
@@ -189,22 +189,13 @@ export const LeafletMap = ({
           const latLng = [Number(stop.coordinates[1]), Number(stop.coordinates[0])];
           L.marker(latLng, { icon: createPinIcon('#64748B', stop.name) })
             .bindPopup(`<b>Stop:</b> ${stop.name}`)
-            .addTo(markersLayerRef.current);
+            .addTo(staticLayerRef.current);
           bounds.push(latLng);
         }
       });
     }
 
-    // 6. Live Bus Marker
-    if (busLocation && busLocation.length >= 2) {
-      const latLng = [Number(busLocation[1]), Number(busLocation[0])];
-      L.marker(latLng, { icon: createBusIcon(true) })
-        .bindPopup('<b>Active Bus Location</b>')
-        .addTo(markersLayerRef.current);
-      bounds.push(latLng);
-    }
-
-    // 7. Auto-fit bounds to view the complete road route and markers
+    // Fit bounds only when route or static stops load
     if (bounds.length > 1) {
       map.fitBounds(L.latLngBounds(bounds), {
         padding: [40, 40],
@@ -215,13 +206,33 @@ export const LeafletMap = ({
       map.setView(bounds[0], 14);
     }
 
-    // Invalidate size to ensure responsive rendering across mobile and desktop
     setTimeout(() => {
       if (mapInstanceRef.current) {
         mapInstanceRef.current.invalidateSize();
       }
     }, 150);
-  }, [routeCoordinates, origin, destination, busLocation, stops, pickupLocation]);
+  }, [routeCoordinates, origin, destination, stops, pickupLocation]);
+
+  // Update Live Bus Marker smoothly WITHOUT resetting zoom or re-fitting bounds
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+
+    if (busLocation && Array.isArray(busLocation) && busLocation.length >= 2) {
+      const latLng = [Number(busLocation[1]), Number(busLocation[0])];
+
+      if (busMarkerRef.current) {
+        busMarkerRef.current.setLatLng(latLng);
+      } else {
+        busMarkerRef.current = L.marker(latLng, { icon: createBusIcon(true) })
+          .bindPopup('<b>Active Bus Location</b>')
+          .addTo(map);
+      }
+    } else if (busMarkerRef.current) {
+      busMarkerRef.current.remove();
+      busMarkerRef.current = null;
+    }
+  }, [busLocation]);
 
   return (
     <div

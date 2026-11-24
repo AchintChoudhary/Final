@@ -8,10 +8,10 @@ import { PrimaryButton } from '../../components/common/PrimaryButton';
 import { busService } from '../../services/busService';
 
 export const AddBusDetails = () => {
-  const [busName, setBusName] = useState();
-  const [plateNumber, setPlateNumber] = useState();
-  const [startLocation, setStartLocation] = useState();
-  const [finalDestination, setFinalDestination] = useState();
+  const [busName, setBusName] = useState('');
+  const [plateNumber, setPlateNumber] = useState('');
+  const [startLocation, setStartLocation] = useState('');
+  const [finalDestination, setFinalDestination] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [existingBusId, setExistingBusId] = useState(null);

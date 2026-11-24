@@ -11,8 +11,8 @@ export const authService = {
     return res.data;
   },
 
-  login: async (mobile, password) => {
-    const res = await api.post('/auth/login', { mobile, password });
+  login: async (mobile, password, role) => {
+    const res = await api.post('/auth/login', { mobile, password, role });
     return res.data;
   },
 
