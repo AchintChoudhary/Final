@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { MapPin, Loader2 } from 'lucide-react';
 import { routeService } from '../../services/routeService';
 
@@ -16,6 +16,10 @@ export const LocationAutocomplete = ({
   const [loading, setLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const wrapperRef = useRef(null);
+  const debounceRef = useRef(null);
+  const abortRef = useRef(null);
+  const requestSequenceRef = useRef(0);
+  const [autocompleteError, setAutocompleteError] = useState('');
 
   useEffect(() => {
     setQuery(value || '');
@@ -28,33 +32,59 @@ export const LocationAutocomplete = ({
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      if (abortRef.current) abortRef.current.abort();
+    };
   }, []);
 
-  const handleInputChange = async (e) => {
+  const handleInputChange = (e) => {
     const text = e.target.value;
+    const sequence = ++requestSequenceRef.current;
     setQuery(text);
     onChange(text);
+    setAutocompleteError('');
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (abortRef.current) abortRef.current.abort();
 
-    if (text.length >= 2) {
-      setLoading(true);
-      try {
-        const res = await routeService.autocomplete(text);
-        setSuggestions(res.results || []);
-        setIsOpen(true);
-      } catch (err) {
-        setSuggestions([]);
-      } finally {
-        setLoading(false);
-      }
-    } else {
+    if (text.trim().length < 2) {
       setSuggestions([]);
       setIsOpen(false);
+      setLoading(false);
+      return;
     }
+
+    setLoading(true);
+    debounceRef.current = setTimeout(async () => {
+      const controller = new AbortController();
+      abortRef.current = controller;
+      try {
+        const res = await routeService.autocomplete(text, controller.signal);
+        if (sequence !== requestSequenceRef.current) return;
+        const results = Array.isArray(res.results) ? res.results : [];
+        setSuggestions(results);
+        setIsOpen(true);
+        setAutocompleteError(results.length === 0 ? 'No matching locations found.' : '');
+      } catch (err) {
+        if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') return;
+        if (sequence !== requestSequenceRef.current) return;
+        setSuggestions([]);
+        setIsOpen(true);
+        setAutocompleteError(err.response?.data?.message || 'Location search is unavailable.');
+      } finally {
+        if (sequence === requestSequenceRef.current) setLoading(false);
+      }
+    }, 400);
   };
 
   const handleSelect = (item) => {
     const selectedName = item.formatted || item.name;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (abortRef.current) abortRef.current.abort();
+    requestSequenceRef.current += 1;
+    setLoading(false);
+    setAutocompleteError('');
     setQuery(selectedName);
     onChange(selectedName);
     if (onSelect) {
@@ -92,6 +122,9 @@ export const LocationAutocomplete = ({
       </div>
 
       {error && <p className="text-xs text-[#EF4444] font-normal">{error}</p>}
+      {autocompleteError && (
+        <p className="text-xs text-[#64748B] font-normal">{autocompleteError}</p>
+      )}
 
       {isOpen && suggestions.length > 0 && (
         <ul className="absolute top-full left-0 right-0 mt-1 z-50 bg-white border border-[#E2E8F0] rounded-lg shadow-lg max-h-60 overflow-y-auto py-1">

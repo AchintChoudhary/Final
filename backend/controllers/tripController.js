@@ -7,6 +7,7 @@ import { calculateETA } from '../services/etaService.js';
 import { ApiError } from '../utils/apiError.js';
 import { isValidCoordinates } from '../utils/validators.js';
 import { PassengerTrackingHistory } from '../models/PassengerTrackingHistory.js';
+import { ENV } from '../config/env.js';
 
 // Start a new trip (Driver)
 export const startTrip = async (req, res, next) => {
@@ -59,15 +60,28 @@ export const stopTrip = async (req, res, next) => {
         reason: trip.status === 'CANCELLED' ? 'CANCELLED' : 'COMPLETED',
       });
     }
-    await PassengerTrackingHistory.updateMany(
-      { tripId: id, finalStatus: 'TRACKING' },
-      { $set: { finalStatus: trip.status, lastViewedAt: new Date() } }
-    );
+    let historyUpdated = true;
+    try {
+      await PassengerTrackingHistory.updateMany(
+        { tripId: id, finalStatus: 'TRACKING' },
+        { $set: { finalStatus: trip.status, lastViewedAt: new Date() } }
+      );
+    } catch (historyError) {
+      historyUpdated = false;
+      console.error(
+        `[Passenger History] Failed to reconcile trip ${id}:`,
+        historyError.message
+      );
+    }
 
     res.status(200).json({
       success: true,
-      message: 'Trip stopped and marked as completed.',
+      message:
+        trip.status === 'COMPLETED'
+          ? 'Trip stopped and marked as completed.'
+          : 'Trip stopped before the confirmed destination and marked as cancelled.',
       trip,
+      historyUpdated,
     });
   } catch (error) {
     next(error);
@@ -209,15 +223,32 @@ export const getTripEta = async (req, res, next) => {
     }
 
     let pickupProgressKm = trip.routeId.totalDistanceKm;
-    if (pickupLng && pickupLat) {
+    let validatedPickupCoordinates = null;
+    if (pickupLng !== undefined || pickupLat !== undefined) {
+      if (!pickupLng || !pickupLat) {
+        throw new ApiError(400, 'Both pickupLng and pickupLat are required');
+      }
+      const lng = parseFloat(pickupLng);
+      const lat = parseFloat(pickupLat);
+      if (!isValidCoordinates(lng, lat)) {
+        throw new ApiError(400, 'Invalid pickup coordinates');
+      }
+      validatedPickupCoordinates = [lng, lat];
       const { projectPointOnRoute } = await import('../utils/geoUtils.js');
       const proj = projectPointOnRoute(
-        [parseFloat(pickupLng), parseFloat(pickupLat)],
+        validatedPickupCoordinates,
         trip.routeId.geometry.coordinates
       );
-      if (proj) {
+      if (
+        proj &&
+        proj.distanceFromRouteMeters <= ENV.ROUTE_MATCH_TOLERANCE_METERS
+      ) {
         pickupProgressKm = proj.progressKm;
+      } else {
+        throw new ApiError(400, 'Pickup is not within the confirmed route');
       }
+    } else {
+      throw new ApiError(400, 'Passenger pickup coordinates are required');
     }
 
     const eta = calculateETA(
@@ -226,6 +257,19 @@ export const getTripEta = async (req, res, next) => {
       trip.routeId.totalDistanceKm,
       trip.routeId.estimatedDurationMinutes
     );
+
+    const gpsAgeMs = trip.lastLocationUpdatedAt
+      ? Date.now() - new Date(trip.lastLocationUpdatedAt).getTime()
+      : Number.POSITIVE_INFINITY;
+    if (gpsAgeMs > ENV.GPS_UNAVAILABLE_MS) {
+      eta.etaMinutes = null;
+      eta.remainingDistanceKm = null;
+      eta.status = 'TRACKING_UNAVAILABLE';
+    } else if (pickupProgressKm < trip.routeProgressKm) {
+      eta.etaMinutes = 0;
+      eta.remainingDistanceKm = 0;
+      eta.status = 'PASSED';
+    }
 
     res.status(200).json({
       success: true,

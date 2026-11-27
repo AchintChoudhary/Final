@@ -37,6 +37,11 @@ export const tripService = {
   },
 
   getTripHistory: async () => {
+    const res = await api.get('/trips/history');
+    return res.data;
+  },
+
+  getPassengerHistory: async () => {
     const res = await api.get('/passenger-history');
     return res.data;
   },

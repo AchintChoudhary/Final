@@ -13,28 +13,60 @@ export const MyTrip = () => {
   const [searchParams] = useSearchParams();
   const pickupName = searchParams.get('pickup') || '';
   const destName = searchParams.get('dest') || '';
+  const pickupLng = searchParams.get('pickupLng');
+  const pickupLat = searchParams.get('pickupLat');
+  const destLng = searchParams.get('destLng');
+  const destLat = searchParams.get('destLat');
 
   const [trip, setTrip] = useState(null);
   const [eta, setEta] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const navigate = useNavigate();
-  const { isTripEnded } = useSocket(tripId);
+  const { tripState, isTripEnded } = useSocket(tripId);
 
   useEffect(() => {
     const fetchTrip = async () => {
       try {
         const res = await tripService.getTripById(tripId);
         setTrip(res.trip);
-        const etaRes = await tripService.getTripEta(tripId);
-        setEta(etaRes.eta);
-      } catch {
-        // quiet catch
+        if (pickupLng && pickupLat) {
+          const etaRes = await tripService.getTripEta(
+            tripId,
+            [Number(pickupLng), Number(pickupLat)]
+          );
+          setEta(etaRes.eta);
+        }
+      } catch (err) {
+        setError(err.response?.data?.message || 'Failed to load route progress.');
       } finally {
         setLoading(false);
       }
     };
     fetchTrip();
-  }, [tripId]);
+  }, [tripId, pickupLng, pickupLat]);
+
+  useEffect(() => {
+    if (!pickupLng || !pickupLat || isTripEnded) return;
+    let active = true;
+    const refreshEta = async () => {
+      try {
+        const etaRes = await tripService.getTripEta(
+          tripId,
+          [Number(pickupLng), Number(pickupLat)]
+        );
+        if (active) setEta(etaRes.eta);
+      } catch (err) {
+        if (active) setError(err.response?.data?.message || 'Failed to refresh pickup ETA.');
+      }
+    };
+    refreshEta();
+    const interval = window.setInterval(refreshEta, 15000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [tripId, pickupLng, pickupLat, isTripEnded]);
 
   if (loading) {
     return (
@@ -54,7 +86,8 @@ export const MyTrip = () => {
           ...(route?.destination ? [{ name: route.destination.name || destName || 'Destination', progressKm: route?.totalDistanceKm || 0, order: 1 }] : []),
         ];
 
-  const currentBusProgress = trip?.routeProgressKm || 0;
+  const currentBusProgress =
+    tripState?.routeProgressKm ?? trip?.routeProgressKm ?? 0;
 
   return (
     <DashboardLayout
@@ -63,6 +96,11 @@ export const MyTrip = () => {
       backTo={`/passenger/tracking/${tripId}`}
     >
       <div className="max-w-xl mx-auto space-y-5">
+        {error && (
+          <div className="p-4 bg-[#FEE2E2] text-[#EF4444] rounded-xl border border-[#FECACA] text-sm">
+            {error}
+          </div>
+        )}
         {(isTripEnded || trip?.status === 'COMPLETED' || trip?.status === 'CANCELLED') && (
           <div className="p-4 bg-[#FEE2E2] text-[#EF4444] rounded-xl border border-[#FECACA] text-sm font-medium">
             The driver has ended this trip. Live route updates and ETA are no longer available.
@@ -145,7 +183,11 @@ export const MyTrip = () => {
         </div>
 
         <PrimaryButton
-          onClick={() => navigate(`/passenger/tracking/${tripId}`)}
+          onClick={() =>
+            navigate(
+              `/passenger/tracking/${tripId}?pickup=${encodeURIComponent(pickupName)}&dest=${encodeURIComponent(destName)}&pickupLng=${encodeURIComponent(pickupLng || '')}&pickupLat=${encodeURIComponent(pickupLat || '')}&destLng=${encodeURIComponent(destLng || '')}&destLat=${encodeURIComponent(destLat || '')}`
+            )
+          }
           variant="outline"
         >
           Return to Live Map

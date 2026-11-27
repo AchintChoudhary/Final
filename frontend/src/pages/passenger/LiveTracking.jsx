@@ -21,13 +21,13 @@ export const LiveTracking = () => {
 
   const [trip, setTrip] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [, setError] = useState('');
+  const [error, setError] = useState('');
   const [eta, setEta] = useState(null);
 
   const navigate = useNavigate();
 
   // Real-time Socket.IO subscription
-  const { liveLocation, lastUpdate, isTripEnded } = useSocket(tripId);
+  const { liveLocation, trackingStatus, lastUpdate, isTripEnded } = useSocket(tripId);
 
   useEffect(() => {
     const fetchTrip = async () => {
@@ -38,8 +38,10 @@ export const LiveTracking = () => {
         // Fetch ETA
         const pickupCoords =
           pickupLng && pickupLat ? [Number(pickupLng), Number(pickupLat)] : null;
-        const etaRes = await tripService.getTripEta(tripId, pickupCoords);
-        setEta(etaRes.eta);
+        if (pickupCoords) {
+          const etaRes = await tripService.getTripEta(tripId, pickupCoords);
+          setEta(etaRes.eta);
+        }
       } catch (err) {
         setError(err.response?.data?.message || 'Failed to fetch trip details');
       } finally {
@@ -49,6 +51,26 @@ export const LiveTracking = () => {
 
     fetchTrip();
   }, [tripId, pickupLng, pickupLat]);
+
+  useEffect(() => {
+    if (!pickupLng || !pickupLat || isTripEnded) return;
+    let active = true;
+    const refreshEta = async () => {
+      try {
+        const pickupCoords = [Number(pickupLng), Number(pickupLat)];
+        const etaRes = await tripService.getTripEta(tripId, pickupCoords);
+        if (active) setEta(etaRes.eta);
+      } catch (err) {
+        if (active) setError(err.response?.data?.message || 'Failed to refresh pickup ETA.');
+      }
+    };
+    refreshEta();
+    const interval = window.setInterval(refreshEta, 15000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [tripId, pickupLng, pickupLat, isTripEnded]);
 
   if (loading) {
     return (
@@ -82,6 +104,12 @@ export const LiveTracking = () => {
       backTo="/passenger/search"
     >
       <div className="max-w-3xl mx-auto space-y-4">
+        {error && (
+          <div className="p-4 bg-[#FEE2E2] text-[#EF4444] rounded-xl border border-[#FECACA] flex items-center space-x-2 text-sm">
+            <AlertTriangle size={18} />
+            <span>{error}</span>
+          </div>
+        )}
         {/* Warning if trip has ended */}
         {isTripEnded && (
           <div className="p-4 bg-[#FEE2E2] text-[#EF4444] rounded-xl border border-[#FECACA] flex items-center space-x-2 text-sm font-medium">
@@ -108,7 +136,19 @@ export const LiveTracking = () => {
           </div>
 
           <div className="flex items-center space-x-2">
-            <StatusBadge status={eta ? `ETA ${eta.etaMinutes} min` : 'Approaching'} />
+            <StatusBadge
+              status={
+                isTripEnded
+                  ? 'Trip Ended'
+                  : trackingStatus !== 'ONLINE'
+                    ? trackingStatus
+                    : eta?.status === 'PASSED'
+                      ? 'Bus Passed Pickup'
+                      : eta?.etaMinutes != null
+                        ? `ETA ${eta.etaMinutes} min`
+                        : 'ETA Unavailable'
+              }
+            />
           </div>
         </div>
 
@@ -123,6 +163,9 @@ export const LiveTracking = () => {
               stops={route?.stops || []}
               pickupLocation={
                 pickupLng && pickupLat ? [Number(pickupLng), Number(pickupLat)] : null
+              }
+              passengerDestination={
+                destLng && destLat ? [Number(destLng), Number(destLat)] : null
               }
               height="380px"
             />
@@ -142,7 +185,11 @@ export const LiveTracking = () => {
               <Clock size={16} className="text-[#1769F4] shrink-0" />
               <div>
                 <span className="font-semibold text-[#0F172A]">Last Update: </span>
-                <span>{lastUpdate ? new Date(lastUpdate).toLocaleTimeString() : 'Just now'}</span>
+                <span>
+                  {lastUpdate
+                    ? new Date(lastUpdate).toLocaleTimeString()
+                    : 'Waiting for GPS update'}
+                </span>
               </div>
             </div>
           </div>

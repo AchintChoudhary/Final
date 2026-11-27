@@ -12,7 +12,7 @@ import { validateObjectIdParam } from '../middleware/validateMiddleware.js';
 
 const router = express.Router();
 
-router.get('/autocomplete', protect, requireRole('DRIVER'), autocomplete);
+router.get('/autocomplete', protect, requireRole('DRIVER', 'PASSENGER'), autocomplete);
 router.get('/preview', protect, requireRole('DRIVER'), previewRoute);
 router.post('/', protect, requireRole('DRIVER'), createRoute);
 router.get('/:id', protect, validateObjectIdParam('id'), getRouteById);

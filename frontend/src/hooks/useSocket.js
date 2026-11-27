@@ -8,9 +8,11 @@ export const useSocket = (tripId = null) => {
   const [isConnected, setIsConnected] = useState(false);
   const [liveLocation, setLiveLocation] = useState(null);
   const [tripState, setTripState] = useState(null);
-  const [trackingStatus, setTrackingStatus] = useState('ONLINE');
+  const [trackingStatus, setTrackingStatus] = useState('UNKNOWN');
   const [lastUpdate, setLastUpdate] = useState(null);
   const [isTripEnded, setIsTripEnded] = useState(false);
+  const [gpsAck, setGpsAck] = useState(null);
+  const [connectionError, setConnectionError] = useState('');
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -35,12 +37,20 @@ export const useSocket = (tripId = null) => {
       setIsConnected(false);
     });
 
+    socket.on('connect_error', (err) => {
+      setIsConnected(false);
+      setConnectionError(err?.message || 'Socket connection failed');
+    });
+
     socket.on('trip:initialState', (state) => {
-      setTripState(state);
+      if (!tripId || state.tripId !== tripId) return;
       if (state.status === 'COMPLETED' || state.status === 'CANCELLED') {
         setIsTripEnded(true);
         setTrackingStatus('UNAVAILABLE');
+        setTripState(state);
+        return;
       }
+      setTripState(state);
       if (state.currentLocation) {
         setLiveLocation(state.currentLocation);
       }
@@ -53,6 +63,7 @@ export const useSocket = (tripId = null) => {
     });
 
     socket.on('trip:locationUpdated', (data) => {
+      if (!tripId || data.tripId !== tripId) return;
       if (data.coordinates) {
         setLiveLocation(data.coordinates);
       }
@@ -63,12 +74,19 @@ export const useSocket = (tripId = null) => {
     });
 
     socket.on('trip:trackingUnavailable', (data) => {
+      if (!tripId || data.tripId !== tripId) return;
       setTrackingStatus(data.trackingStatus || 'UNAVAILABLE');
     });
 
-    socket.on('trip:ended', () => {
+    socket.on('trip:ended', (data) => {
+      if (!tripId || data?.tripId !== tripId) return;
       setIsTripEnded(true);
       setTrackingStatus('UNAVAILABLE');
+    });
+
+    socket.on('driver:locationAck', (ack) => {
+      if (!tripId || ack?.tripId !== tripId) return;
+      setGpsAck(ack);
     });
 
     return () => {
@@ -93,6 +111,8 @@ export const useSocket = (tripId = null) => {
     isConnected,
     liveLocation,
     tripState,
+    gpsAck,
+    connectionError,
     trackingStatus,
     lastUpdate,
     isTripEnded,

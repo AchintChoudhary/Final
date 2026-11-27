@@ -15,6 +15,7 @@ import tileRoutes from './routes/tileRoutes.js';
 import passengerHistoryRoutes from './routes/passengerHistoryRoutes.js';
 
 const app = express();
+app.set('trust proxy', 1);
 
 // Security middleware
 app.use(
@@ -61,10 +62,11 @@ app.use('/api/auth/login', authLimiter);
 
 // Health check
 app.get('/api/health', (req, res) => {
-  res.status(200).json({
+  const databaseConnected = getDBConnectionStatus();
+  res.status(databaseConnected ? 200 : 503).json({
     status: 'ok',
     timestamp: new Date(),
-    databaseConnected: getDBConnectionStatus(),
+    databaseConnected,
     environment: ENV.NODE_ENV,
     geoapifyConfigured: Boolean(ENV.GEOAPIFY_API_KEY),
   });

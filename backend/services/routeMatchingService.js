@@ -101,7 +101,21 @@ export class RouteMatchingService {
       const arrivalToleranceKm = Math.max(toleranceMeters, 500) / 1000;
       const progressDifferenceKm = pickupProgressKm - busProgressKm;
       let pickupStatus = 'APPROACHING';
-      if (Math.abs(progressDifferenceKm) <= arrivalToleranceKm) {
+      const pickupCoordsForArrival = pickupProjection.snappedCoordinates;
+      const [busLng, busLat] = busCoords;
+      const [pickupLng, pickupLat] = pickupCoordsForArrival;
+      const toRadians = (degrees) => (degrees * Math.PI) / 180;
+      const dLat = toRadians(pickupLat - busLat);
+      const dLng = toRadians(pickupLng - busLng);
+      const haversine =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(toRadians(busLat)) * Math.cos(toRadians(pickupLat)) * Math.sin(dLng / 2) ** 2;
+      const physicalDistanceMeters =
+        6371000 * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+      if (
+        Math.abs(progressDifferenceKm) <= arrivalToleranceKm &&
+        physicalDistanceMeters <= Math.min(toleranceMeters, 500)
+      ) {
         pickupStatus = 'ARRIVED';
       } else if (progressDifferenceKm < 0) {
         continue;
@@ -110,6 +124,8 @@ export class RouteMatchingService {
       // Step 6: Check Pickup Policy (FIXED, FLEXIBLE, BOTH)
       const policy = trip.pickupPolicy || route.pickupPolicy || 'BOTH';
       let pickupType = 'FLEXIBLE';
+      let approvedPickupCoordinates = pickupProjection.snappedCoordinates;
+      let approvedPickupProgressKm = pickupProgressKm;
 
       if (policy === 'FIXED') {
         // Check if there is a fixed stop near the passenger's pickup location
@@ -127,6 +143,14 @@ export class RouteMatchingService {
           continue;
         }
         pickupType = 'FIXED_STOP';
+        approvedPickupCoordinates = nearStop.coordinates;
+        const approvedPickupProjection = projectPointOnRoute(
+          nearStop.coordinates,
+          routeCoordinates
+        );
+        if (approvedPickupProjection) {
+          approvedPickupProgressKm = approvedPickupProjection.progressKm;
+        }
       }
 
       const destinationStopsNearPoint = (route.stops || []).filter((stop) => {
@@ -142,7 +166,12 @@ export class RouteMatchingService {
       }
 
       // Step 7: Calculate accurate ETA and remaining distance
-      const etaInfo = getCachedTripETA(trip._id, busProgressKm, pickupProgressKm, route);
+      const etaInfo = getCachedTripETA(
+        trip._id,
+        busProgressKm,
+        approvedPickupProgressKm,
+        route
+      );
 
       matchingBuses.push({
         tripId: trip._id,
@@ -153,13 +182,13 @@ export class RouteMatchingService {
         originName: route.origin?.name,
         destinationName: route.destination?.name,
         pickupPoint: {
-          coordinates: pickupCoords,
+          coordinates: approvedPickupCoordinates,
           snappedCoordinates: pickupProjection.snappedCoordinates,
           type: pickupType,
         },
         currentLocation: trip.currentLocation?.coordinates || null,
         busProgressKm: +busProgressKm.toFixed(2),
-        pickupProgressKm: +pickupProgressKm.toFixed(2),
+        pickupProgressKm: +approvedPickupProgressKm.toFixed(2),
         destinationProgressKm: +destinationProgressKm.toFixed(2),
         trackingStatus: trackingStatus,
         pickupStatus,

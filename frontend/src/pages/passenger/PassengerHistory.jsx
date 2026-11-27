@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Clock, Bus } from 'lucide-react';
+import { Clock, Bus, AlertCircle } from 'lucide-react';
 import { DashboardLayout } from '../../components/layout/DashboardLayout';
 import { EmptyState } from '../../components/common/EmptyState';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
@@ -8,12 +8,16 @@ import { tripService } from '../../services/tripService';
 export const PassengerHistory = () => {
   const [trips, setTrips] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     tripService
-      .getTripHistory()
+      .getPassengerHistory()
       .then((res) => setTrips(res.entries || []))
-      .catch(() => setTrips([]))
+      .catch((err) => {
+        setTrips([]);
+        setError(err.response?.data?.message || 'Failed to load tracking history.');
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -24,6 +28,12 @@ export const PassengerHistory = () => {
       subtitle="History of buses you selected for tracking"
       backTo="/passenger/search"
     >
+      {error && (
+        <div className="max-w-3xl mx-auto mb-4 p-3 text-sm text-[#EF4444] bg-[#FEE2E2] rounded-lg flex items-center space-x-2">
+          <AlertCircle size={16} />
+          <span>{error}</span>
+        </div>
+      )}
       {loading ? (
         <LoadingSpinner text="Loading trips history..." />
       ) : trips.length === 0 ? (

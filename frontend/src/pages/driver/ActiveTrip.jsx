@@ -22,7 +22,7 @@ export const ActiveTrip = () => {
   const navigate = useNavigate();
 
   // Socket connection to trip room
-  const { emitDriverLocation } = useSocket(trip?._id);
+  const { emitDriverLocation, gpsAck, connectionError } = useSocket(trip?._id);
 
   // Real device GPS watching
   const { location: gpsLocation, error: gpsError, startWatching, stopWatching } = useGeolocation({
@@ -114,11 +114,11 @@ export const ActiveTrip = () => {
   const route = trip.routeId;
   const formattedStartTime = trip.startedAt
     ? new Date(trip.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    : '10:15 AM';
+    : '-';
 
   const currentCoords = gpsLocation
     ? [gpsLocation.longitude, gpsLocation.latitude]
-    : trip.currentLocation?.coordinates || route?.origin?.coordinates;
+    : trip.currentLocation?.coordinates || null;
 
   return (
     <DashboardLayout
@@ -132,6 +132,16 @@ export const ActiveTrip = () => {
           <div className="p-3 text-xs font-medium text-[#EF4444] bg-[#FEE2E2] rounded-lg border border-[#FECACA] flex items-center space-x-2">
             <AlertCircle size={16} />
             <span>{error || gpsError}</span>
+          </div>
+        )}
+        {gpsAck && !gpsAck.accepted && (
+          <div className="p-3 text-xs font-medium text-[#EF4444] bg-[#FEE2E2] rounded-lg border border-[#FECACA]">
+            GPS update rejected: {gpsAck.reason || 'Unknown backend rejection'}
+          </div>
+        )}
+        {connectionError && (
+          <div className="p-3 text-xs font-medium text-[#EF4444] bg-[#FEE2E2] rounded-lg border border-[#FECACA]">
+            Socket connection failed: {connectionError}
           </div>
         )}
 

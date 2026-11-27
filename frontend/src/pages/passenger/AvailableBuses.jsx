@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Bus, ChevronRight, AlertCircle } from 'lucide-react';
 import { DashboardLayout } from '../../components/layout/DashboardLayout';
@@ -19,12 +19,17 @@ export const AvailableBuses = () => {
   const [buses, setBuses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const requestSequenceRef = useRef(0);
+  const refreshInProgressRef = useRef(false);
 
   const navigate = useNavigate();
 
   useEffect(() => {
-    const fetchBuses = async () => {
-      setLoading(true);
+    const fetchBuses = async (background = false) => {
+      if (refreshInProgressRef.current) return;
+      refreshInProgressRef.current = true;
+      const sequence = ++requestSequenceRef.current;
+      if (!background) setLoading(true);
       setError('');
       try {
         const params = { pickup, destination };
@@ -37,19 +42,24 @@ export const AvailableBuses = () => {
           params.destLat = destLat;
         }
         const res = await tripService.searchBuses(params);
-        setBuses(res.buses || []);
+        if (sequence === requestSequenceRef.current) {
+          setBuses(res.buses || []);
+        }
       } catch (err) {
-        setError(
-          err.response?.data?.message ||
-            'Failed to search active buses. Please ensure valid locations.'
-        );
+        if (sequence === requestSequenceRef.current) {
+          setError(
+            err.response?.data?.message ||
+              'Failed to search active buses. Please ensure valid locations.'
+          );
+        }
       } finally {
-        setLoading(false);
+        refreshInProgressRef.current = false;
+        if (!background && sequence === requestSequenceRef.current) setLoading(false);
       }
     };
 
-    fetchBuses();
-    const refreshInterval = window.setInterval(fetchBuses, 15000);
+    fetchBuses(false);
+    const refreshInterval = window.setInterval(() => fetchBuses(true), 15000);
     return () => window.clearInterval(refreshInterval);
   }, [pickup, destination, pickupLng, pickupLat, destLng, destLat]);
 

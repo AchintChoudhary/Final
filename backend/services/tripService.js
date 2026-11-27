@@ -133,7 +133,7 @@ export class TripService {
    * Stop an active trip
    */
   static async stopTrip(tripId, driverId) {
-    const trip = await Trip.findById(tripId);
+    const trip = await Trip.findById(tripId).populate('routeId');
     if (!trip) {
       throw new ApiError(404, 'Trip not found');
     }
@@ -150,11 +150,32 @@ export class TripService {
     }
 
     const endedAt = new Date();
+    let finalStatus = 'CANCELLED';
+    if (trip.routeId?.geometry?.coordinates && trip.currentLocation?.coordinates) {
+      const routeCoordinates = trip.routeId.geometry.coordinates;
+      const destination = trip.routeId.destination?.coordinates;
+      const destinationProjection = destination
+        ? projectPointOnRoute(destination, routeCoordinates)
+        : null;
+      const currentProjection = projectPointOnRoute(
+        trip.currentLocation.coordinates,
+        routeCoordinates
+      );
+      if (
+        destinationProjection &&
+        currentProjection &&
+        currentProjection.progressKm >= trip.routeId.totalDistanceKm * 0.98 &&
+        destinationProjection.distanceFromRouteMeters <= ENV.ROUTE_MATCH_TOLERANCE_METERS &&
+        currentProjection.distanceFromRouteMeters <= ENV.ROUTE_MATCH_TOLERANCE_METERS
+      ) {
+        finalStatus = 'COMPLETED';
+      }
+    }
     const endedTrip = await Trip.findOneAndUpdate(
       { _id: tripId, driverId, status: 'ACTIVE' },
       {
         $set: {
-          status: 'COMPLETED',
+          status: finalStatus,
           endedAt,
           trackingStatus: 'UNAVAILABLE',
         },
@@ -236,25 +257,37 @@ export class TripService {
       }
     }
 
-    trip.currentLocation = {
-      type: 'Point',
-      coordinates: coords,
-    };
-    trip.lastLocationUpdatedAt = new Date();
-    trip.lastGpsMeasuredAt = measuredAt;
-    trip.routeProgressKm = newProgress;
-    trip.trackingStatus = trackingStatus;
-    trip.lastGpsAccuracyMeters = accuracy;
-    if (sequence) trip.lastSequenceNumber = sequence;
-
-    await trip.save();
+    const receivedAt = new Date();
+    const updatedTrip = await Trip.findOneAndUpdate(
+      {
+        _id: tripId,
+        driverId,
+        status: 'ACTIVE',
+        lastSequenceNumber: { $lt: sequence },
+      },
+      {
+        $set: {
+          currentLocation: { type: 'Point', coordinates: coords },
+          lastLocationUpdatedAt: receivedAt,
+          lastGpsMeasuredAt: measuredAt,
+          routeProgressKm: newProgress,
+          trackingStatus,
+          lastGpsAccuracyMeters: accuracy,
+          lastSequenceNumber: sequence,
+        },
+      },
+      { new: true }
+    );
+    if (!updatedTrip) {
+      return { skipped: true, reason: 'Duplicate, stale, or trip ended' };
+    }
 
     return {
-      tripId: trip._id,
+      tripId: updatedTrip._id,
       coordinates: coords,
       routeProgressKm: newProgress,
       trackingStatus,
-      lastLocationUpdatedAt: trip.lastLocationUpdatedAt,
+      lastLocationUpdatedAt: receivedAt,
     };
   }
 }

@@ -57,11 +57,17 @@ export const getMyBuses = async (req, res, next) => {
 // Get single bus details
 export const getBusById = async (req, res, next) => {
   try {
-    const bus = await Bus.findById(req.params.id).populate('driverId', 'name mobile');
+    const bus = await Bus.findById(req.params.id).populate('driverId', 'name');
     if (!bus) {
       throw new ApiError(404, 'Bus not found');
     }
-    if (req.user.role === 'DRIVER' && bus.driverId.toString() !== req.user._id.toString()) {
+    if (
+      req.user.role === 'DRIVER' &&
+      (!bus.driverId ||
+        (bus.driverId._id
+          ? bus.driverId._id.toString() !== req.user._id.toString()
+          : bus.driverId.toString() !== req.user._id.toString()))
+    ) {
       throw new ApiError(403, 'Unauthorized: You can only view your own bus');
     }
     res.status(200).json({

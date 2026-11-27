@@ -2,6 +2,8 @@ import { Route } from '../models/Route.js';
 import { ApiError } from '../utils/apiError.js';
 import { geocodeLocation, fetchRoadRoute, autocompletePlace } from '../services/geoapifyService.js';
 import { projectPointOnRoute } from '../utils/geoUtils.js';
+import { isValidCoordinates } from '../utils/validators.js';
+import { ENV } from '../config/env.js';
 
 // Autocomplete place suggestions
 export const autocomplete = async (req, res, next) => {
@@ -76,6 +78,18 @@ export const createRoute = async (req, res, next) => {
     ) {
       throw new ApiError(400, 'Valid route origin and destination coordinates are required');
     }
+    if (
+      !isValidCoordinates(origin.coordinates[0], origin.coordinates[1]) ||
+      !isValidCoordinates(destination.coordinates[0], destination.coordinates[1])
+    ) {
+      throw new ApiError(400, 'Route origin and destination coordinates are out of range');
+    }
+    for (const coordinate of geometry.coordinates) {
+      if (!Array.isArray(coordinate) || coordinate.length !== 2 ||
+        !isValidCoordinates(coordinate[0], coordinate[1])) {
+        throw new ApiError(400, 'Route geometry contains invalid coordinates');
+      }
+    }
     if (!['FIXED', 'FLEXIBLE', 'BOTH'].includes(pickupPolicy || 'BOTH')) {
       throw new ApiError(400, 'Invalid pickup policy');
     }
@@ -86,8 +100,18 @@ export const createRoute = async (req, res, next) => {
       processedStops = stops.map((stop, index) => {
         let progress = 0;
         if (stop.coordinates && geometry.coordinates) {
+          if (
+            !Array.isArray(stop.coordinates) ||
+            stop.coordinates.length !== 2 ||
+            !isValidCoordinates(stop.coordinates[0], stop.coordinates[1])
+          ) {
+            throw new ApiError(400, 'A stop contains invalid coordinates');
+          }
           const proj = projectPointOnRoute(stop.coordinates, geometry.coordinates);
           if (proj) progress = proj.progressKm;
+          if (!proj || proj.distanceFromRouteMeters > ENV.ROUTE_MATCH_TOLERANCE_METERS) {
+            throw new ApiError(400, `Stop "${stop.name || index + 1}" is too far from the confirmed route`);
+          }
         }
         return {
           stopId: stop.stopId || `stop_${index + 1}`,
@@ -100,7 +124,7 @@ export const createRoute = async (req, res, next) => {
         };
       });
       // Sort stops by order
-      processedStops.sort((a, b) => a.order - b.order);
+      processedStops.sort((a, b) => a.progressKm - b.progressKm);
     }
 
     const route = await Route.create({

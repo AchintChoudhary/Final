@@ -1,8 +1,8 @@
 import api from './api';
 
 export const routeService = {
-  autocomplete: async (text) => {
-    const res = await api.get(`/routes/autocomplete?text=${encodeURIComponent(text)}`);
+  autocomplete: async (text, signal) => {
+    const res = await api.get(`/routes/autocomplete?text=${encodeURIComponent(text)}`, { signal });
     return res.data;
   },
 

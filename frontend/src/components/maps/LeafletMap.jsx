@@ -66,6 +66,7 @@ export const LeafletMap = ({
   busLocation = null, // [lng, lat]
   stops = [], // array of { name, coordinates: [lng, lat], order }
   pickupLocation = null, // [lng, lat]
+  passengerDestination = null, // [lng, lat]
   height = '400px',
   className = '',
 }) => {
@@ -184,6 +185,17 @@ export const LeafletMap = ({
       const latLng = [Number(pickupLocation[1]), Number(pickupLocation[0])];
       L.marker(latLng, { icon: createPinIcon('#16A34A', 'Your Pickup') })
         .bindPopup('<b>Your Pickup Point</b>')
+        .addTo(staticLayerRef.current);
+      bounds.push(latLng);
+    }
+
+    if (passengerDestination && passengerDestination.length >= 2) {
+      const latLng = [
+        Number(passengerDestination[1]),
+        Number(passengerDestination[0]),
+      ];
+      L.marker(latLng, { icon: createPinIcon('#EF4444', 'Your Destination') })
+        .bindPopup('<b>Your Destination</b>')
         .addTo(staticLayerRef.current);
       bounds.push(latLng);
     }
