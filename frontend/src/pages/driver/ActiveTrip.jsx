@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bus, Clock, MapPin, StopCircle, Radio, AlertCircle } from 'lucide-react';
+import { Bus, StopCircle, Radio, AlertCircle } from 'lucide-react';
 import { DashboardLayout } from '../../components/layout/DashboardLayout';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { PrimaryButton } from '../../components/common/PrimaryButton';
@@ -18,12 +18,11 @@ export const ActiveTrip = () => {
   const [stopConfirmOpen, setStopConfirmOpen] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [error, setError] = useState('');
-  const [lastUpdateText, setLastUpdateText] = useState('just now');
 
   const navigate = useNavigate();
 
   // Socket connection to trip room
-  const { emitDriverLocation, isConnected } = useSocket(trip?._id);
+  const { emitDriverLocation } = useSocket(trip?._id);
 
   // Real device GPS watching
   const { location: gpsLocation, error: gpsError, startWatching, stopWatching } = useGeolocation({
@@ -41,9 +40,13 @@ export const ActiveTrip = () => {
         const res = await tripService.getMyActiveTrip();
         if (res.trip) {
           setTrip(res.trip);
+          sequenceRef.current = Math.max(
+            1,
+            Number.isFinite(res.trip.lastSequenceNumber) ? res.trip.lastSequenceNumber : 0
+          );
           startWatching();
         }
-      } catch (err) {
+      } catch {
         setError('Failed to fetch active trip');
       } finally {
         setLoading(false);
@@ -51,8 +54,9 @@ export const ActiveTrip = () => {
     };
 
     fetchActiveTrip();
-    return () => stopWatching();
   }, [startWatching, stopWatching]);
+
+  useEffect(() => () => stopWatching(), [stopWatching]);
 
   // When real device GPS update arrives, transmit to backend via Socket.IO
   useEffect(() => {
@@ -64,9 +68,8 @@ export const ActiveTrip = () => {
         longitude: gpsLocation.longitude,
         accuracy: Math.round(gpsLocation.accuracy),
         sequence: sequenceRef.current,
-        timestamp: new Date().toISOString(),
+        timestamp: new Date(gpsLocation.timestamp).toISOString(),
       });
-      setLastUpdateText('just now');
     }
   }, [gpsLocation, trip, emitDriverLocation]);
 
@@ -195,7 +198,7 @@ export const ActiveTrip = () => {
               <Radio size={14} className="text-[#1769F4]" />
               <span>GPS Tracking: {gpsLocation ? 'Active Fix' : 'Awaiting GPS...'}</span>
             </div>
-            <span>Last GPS update: {lastUpdateText}</span>
+            <span>Last GPS update: {gpsLocation ? new Date(gpsLocation.timestamp).toLocaleTimeString() : 'Waiting for GPS'}</span>
           </div>
         </div>
       </div>

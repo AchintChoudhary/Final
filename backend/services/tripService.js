@@ -9,7 +9,15 @@ export class TripService {
   /**
    * Start a new trip for a driver
    */
-  static async startTrip({ driverId, busId, routeId, pickupPolicy, initialCoords }) {
+  static async startTrip({
+    driverId,
+    busId,
+    routeId,
+    pickupPolicy,
+    initialCoords,
+    initialAccuracy,
+    initialTimestamp,
+  }) {
     // 1. Verify bus exists and belongs to or is assigned to driver
     const bus = await Bus.findById(busId);
     if (!bus) {
@@ -23,6 +31,9 @@ export class TripService {
     const route = await Route.findById(routeId);
     if (!route || !route.geometry || !route.geometry.coordinates) {
       throw new ApiError(404, 'Route or route road geometry not found');
+    }
+    if (route.createdBy && route.createdBy.toString() !== driverId.toString()) {
+      throw new ApiError(403, 'You are not authorized to start a trip on this route');
     }
 
     // 3. Atomically check if driver already has an active trip
@@ -64,11 +75,37 @@ export class TripService {
       coordinates: [lng, lat],
     };
 
+    if (
+      typeof initialAccuracy !== 'number' ||
+      !Number.isFinite(initialAccuracy) ||
+      initialAccuracy < 0 ||
+      initialAccuracy > ENV.GPS_MAX_ACCURACY_METERS
+    ) {
+      throw new ApiError(
+        400,
+        `GPS accuracy must be provided and at most ${ENV.GPS_MAX_ACCURACY_METERS} metres`
+      );
+    }
+    if (!initialTimestamp) throw new ApiError(400, 'GPS measurement timestamp is required');
+    const measuredAt = new Date(initialTimestamp);
+    if (
+      Number.isNaN(measuredAt.getTime()) ||
+      Date.now() - measuredAt.getTime() > ENV.GPS_UNAVAILABLE_MS ||
+      measuredAt.getTime() - Date.now() > 30000
+    ) {
+      throw new ApiError(400, 'GPS measurement is stale or invalid');
+    }
+
     let initialProgress = 0;
     const proj = projectPointOnRoute([lng, lat], route.geometry.coordinates);
-    if (proj) {
-      initialProgress = proj.progressKm;
+    if (!proj) throw new ApiError(400, 'GPS coordinates could not be matched to the route');
+    if (proj.distanceFromRouteMeters > ENV.ROUTE_MATCH_TOLERANCE_METERS) {
+      throw new ApiError(
+        400,
+        `Driver GPS is ${Math.round(proj.distanceFromRouteMeters)} metres from the confirmed route`
+      );
     }
+    initialProgress = proj.progressKm;
 
     const trip = await Trip.create({
       driverId,
@@ -79,6 +116,8 @@ export class TripService {
       startedAt: new Date(),
       currentLocation: startLocation,
       lastLocationUpdatedAt: new Date(),
+      lastGpsMeasuredAt: measuredAt,
+      lastGpsAccuracyMeters: initialAccuracy,
       routeProgressKm: initialProgress,
       trackingStatus: 'ONLINE',
       lastSequenceNumber: 1,
@@ -103,22 +142,45 @@ export class TripService {
       throw new ApiError(403, 'Unauthorized: you can only stop your own trip');
     }
 
+    if (trip.status === 'COMPLETED' || trip.status === 'CANCELLED') {
+      return trip;
+    }
     if (trip.status !== 'ACTIVE') {
       throw new ApiError(400, `Cannot stop trip with status: ${trip.status}`);
     }
 
-    trip.status = 'COMPLETED';
-    trip.endedAt = new Date();
-    trip.trackingStatus = 'UNAVAILABLE';
-    await trip.save();
-
-    return trip;
+    const endedAt = new Date();
+    const endedTrip = await Trip.findOneAndUpdate(
+      { _id: tripId, driverId, status: 'ACTIVE' },
+      {
+        $set: {
+          status: 'COMPLETED',
+          endedAt,
+          trackingStatus: 'UNAVAILABLE',
+        },
+      },
+      { new: true }
+    );
+    if (!endedTrip) {
+      const latest = await Trip.findById(tripId);
+      if (latest && latest.status !== 'ACTIVE') return latest;
+      throw new ApiError(409, 'Trip status changed before it could be stopped');
+    }
+    return endedTrip;
   }
 
   /**
    * Process a real-time GPS update from driver
    */
-  static async updateGpsLocation({ tripId, driverId, latitude, longitude, accuracy, sequence }) {
+  static async updateGpsLocation({
+    tripId,
+    driverId,
+    latitude,
+    longitude,
+    accuracy,
+    sequence,
+    timestamp,
+  }) {
     const trip = await Trip.findById(tripId).populate('routeId');
     if (!trip) {
       throw new ApiError(404, 'Active trip not found');
@@ -132,13 +194,26 @@ export class TripService {
       throw new ApiError(400, 'Trip is not active');
     }
 
-    // Reject out-of-order sequence
-    if (sequence && sequence <= trip.lastSequenceNumber) {
+    if (typeof sequence !== 'number' || !Number.isFinite(sequence)) {
+      throw new ApiError(400, 'GPS sequence number is required');
+    }
+    if (typeof accuracy !== 'number' || !Number.isFinite(accuracy) || accuracy < 0) {
+      throw new ApiError(400, 'GPS accuracy is required');
+    }
+    if (!timestamp) throw new ApiError(400, 'GPS measurement timestamp is required');
+    const measuredAt = new Date(timestamp);
+    if (Number.isNaN(measuredAt.getTime())) {
+      throw new ApiError(400, 'Invalid GPS measurement timestamp');
+    }
+    const ageMs = Date.now() - measuredAt.getTime();
+    if (ageMs > ENV.GPS_UNAVAILABLE_MS) {
+      return { skipped: true, reason: 'Stale GPS measurement' };
+    }
+    if (ageMs < -30000) throw new ApiError(400, 'GPS measurement timestamp is in the future');
+    if (sequence <= trip.lastSequenceNumber) {
       return { skipped: true, reason: 'Duplicate or older sequence' };
     }
-
-    // Validate GPS accuracy
-    if (accuracy && accuracy > ENV.GPS_MAX_ACCURACY_METERS) {
+    if (accuracy > ENV.GPS_MAX_ACCURACY_METERS) {
       return { skipped: true, reason: 'GPS accuracy too low' };
     }
 
@@ -151,9 +226,8 @@ export class TripService {
     if (route && route.geometry && route.geometry.coordinates) {
       const proj = projectPointOnRoute(coords, route.geometry.coordinates);
       if (proj) {
-        // If driver is too far from route, mark status warning
         if (proj.distanceFromRouteMeters > ENV.ROUTE_MATCH_TOLERANCE_METERS * 2) {
-          trackingStatus = 'STALE';
+          return { skipped: true, reason: 'GPS update is outside the confirmed route' };
         }
         // Plausibility check: progress should not jump backwards drastically
         if (proj.progressKm >= trip.routeProgressKm - 0.5) {
@@ -167,6 +241,7 @@ export class TripService {
       coordinates: coords,
     };
     trip.lastLocationUpdatedAt = new Date();
+    trip.lastGpsMeasuredAt = measuredAt;
     trip.routeProgressKm = newProgress;
     trip.trackingStatus = trackingStatus;
     trip.lastGpsAccuracyMeters = accuracy;

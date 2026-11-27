@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Clock, Bus, MapPin } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Clock, Bus } from 'lucide-react';
 import { DashboardLayout } from '../../components/layout/DashboardLayout';
 import { EmptyState } from '../../components/common/EmptyState';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
@@ -12,7 +12,7 @@ export const PassengerHistory = () => {
   useEffect(() => {
     tripService
       .getTripHistory()
-      .then((res) => setTrips(res.trips || []))
+      .then((res) => setTrips(res.entries || []))
       .catch(() => setTrips([]))
       .finally(() => setLoading(false));
   }, []);
@@ -20,8 +20,8 @@ export const PassengerHistory = () => {
   return (
     <DashboardLayout
       role="PASSENGER"
-      title="My Trips"
-      subtitle="History of your tracked trips"
+      title="Tracking History"
+      subtitle="History of buses you selected for tracking"
       backTo="/passenger/search"
     >
       {loading ? (
@@ -45,18 +45,18 @@ export const PassengerHistory = () => {
                 </div>
                 <div>
                   <h4 className="text-sm font-bold text-[#0F172A]">
-                    {t.busId?.busName || 'Bus'} ({t.busId?.plateNumber || '-'})
+                    {t.busSnapshot?.busName || 'Bus'} ({t.busSnapshot?.plateNumber || '-'})
                   </h4>
-                  <p className="text-xs text-[#64748B] mt-0.5">{t.routeId?.name || 'Route'}</p>
+                  <p className="text-xs text-[#64748B] mt-0.5">{t.routeSnapshot?.name || 'Route'}</p>
                 </div>
               </div>
 
               <div className="text-xs text-[#64748B] text-right">
                 <p className="font-semibold text-[#0F172A]">
-                  {t.endedAt ? new Date(t.endedAt).toLocaleDateString() : 'Completed'}
+                  {t.lastViewedAt ? new Date(t.lastViewedAt).toLocaleDateString() : 'Tracking'}
                 </p>
                 <p className="mt-0.5">
-                  {t.endedAt ? new Date(t.endedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-'}
+                  {t.lastViewedAt ? new Date(t.lastViewedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-'}
                 </p>
               </div>
             </div>

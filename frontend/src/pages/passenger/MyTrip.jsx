@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
-import { Bus, CheckCircle2, Circle, Radio, ArrowLeft, MapPin } from 'lucide-react';
+import { Bus, CheckCircle2, Circle } from 'lucide-react';
 import { DashboardLayout } from '../../components/layout/DashboardLayout';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import { PrimaryButton } from '../../components/common/PrimaryButton';
 import { tripService } from '../../services/tripService';
+import { useSocket } from '../../hooks/useSocket';
 
 export const MyTrip = () => {
   const { tripId } = useParams();
@@ -17,6 +18,7 @@ export const MyTrip = () => {
   const [eta, setEta] = useState(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const { isTripEnded } = useSocket(tripId);
 
   useEffect(() => {
     const fetchTrip = async () => {
@@ -25,7 +27,7 @@ export const MyTrip = () => {
         setTrip(res.trip);
         const etaRes = await tripService.getTripEta(tripId);
         setEta(etaRes.eta);
-      } catch (err) {
+      } catch {
         // quiet catch
       } finally {
         setLoading(false);
@@ -49,10 +51,7 @@ export const MyTrip = () => {
       ? route.stops
       : [
           ...(route?.origin ? [{ name: route.origin.name || 'Origin', progressKm: 0, order: 0 }] : []),
-          ...(pickupName && pickupName !== route?.origin?.name && pickupName !== route?.destination?.name
-            ? [{ name: pickupName, progressKm: (route?.totalDistanceKm || 0) * 0.5, order: 1 }]
-            : []),
-          ...(route?.destination ? [{ name: route.destination.name || destName || 'Destination', progressKm: route?.totalDistanceKm || 0, order: 2 }] : []),
+          ...(route?.destination ? [{ name: route.destination.name || destName || 'Destination', progressKm: route?.totalDistanceKm || 0, order: 1 }] : []),
         ];
 
   const currentBusProgress = trip?.routeProgressKm || 0;
@@ -60,10 +59,15 @@ export const MyTrip = () => {
   return (
     <DashboardLayout
       role="PASSENGER"
-      title="My Trip"
+      title="Route Progress"
       backTo={`/passenger/tracking/${tripId}`}
     >
       <div className="max-w-xl mx-auto space-y-5">
+        {(isTripEnded || trip?.status === 'COMPLETED' || trip?.status === 'CANCELLED') && (
+          <div className="p-4 bg-[#FEE2E2] text-[#EF4444] rounded-xl border border-[#FECACA] text-sm font-medium">
+            The driver has ended this trip. Live route updates and ETA are no longer available.
+          </div>
+        )}
         {/* Top Bus Card */}
         <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 shadow-xs flex items-center justify-between">
           <div className="flex items-center space-x-3.5">

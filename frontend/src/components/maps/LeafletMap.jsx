@@ -1,6 +1,11 @@
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+
+const escapeHtml = (value) =>
+  String(value ?? '').replace(/[&<>"']/g, (character) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[character]
+  );
 
 // SVG Icon Helpers
 const createBusIcon = (isActive = true) => {
@@ -31,13 +36,14 @@ const createBusIcon = (isActive = true) => {
 };
 
 const createPinIcon = (color = '#16A34A', label = '') => {
+  const safeLabel = escapeHtml(label);
   return L.divIcon({
     className: 'custom-pin-marker',
     html: `
       <div style="display: flex; flex-direction: column; align-items: center;">
         ${
-          label
-            ? `<span style="background: #0F172A; color: #FFFFFF; font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 4px; margin-bottom: 2px; white-space: nowrap; box-shadow: 0 2px 4px rgba(0,0,0,0.25);">${label}</span>`
+          safeLabel
+            ? `<span style="background: #0F172A; color: #FFFFFF; font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 4px; margin-bottom: 2px; white-space: nowrap; box-shadow: 0 2px 4px rgba(0,0,0,0.25);">${safeLabel}</span>`
             : ''
         }
         <div style="width: 22px; height: 22px; background: ${color}; border: 2.5px solid #FFFFFF; border-radius: 9999px; box-shadow: 0 2px 5px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center;">
@@ -52,8 +58,8 @@ const createPinIcon = (color = '#16A34A', label = '') => {
 };
 
 export const LeafletMap = ({
-  center = [22.7196, 75.8577], // Default Indore [lat, lng]
-  zoom = 12,
+  center = [0, 0],
+  zoom = 2,
   routeCoordinates = null, // GeoJSON LineString coordinates [[lng, lat], ...]
   origin = null, // { name, coordinates: [lng, lat] }
   destination = null, // { name, coordinates: [lng, lat] }
@@ -159,7 +165,7 @@ export const LeafletMap = ({
     if (origin && origin.coordinates && origin.coordinates.length >= 2) {
       const latLng = [Number(origin.coordinates[1]), Number(origin.coordinates[0])];
       L.marker(latLng, { icon: createPinIcon('#16A34A', origin.name || 'Start') })
-        .bindPopup(`<b>Start Location:</b><br/>${origin.name || 'Origin'}`)
+        .bindPopup(`<b>Start Location:</b><br/>${escapeHtml(origin.name || 'Origin')}`)
         .addTo(staticLayerRef.current);
       bounds.push(latLng);
     }
@@ -168,7 +174,7 @@ export const LeafletMap = ({
     if (destination && destination.coordinates && destination.coordinates.length >= 2) {
       const latLng = [Number(destination.coordinates[1]), Number(destination.coordinates[0])];
       L.marker(latLng, { icon: createPinIcon('#EF4444', destination.name || 'Destination') })
-        .bindPopup(`<b>Destination:</b><br/>${destination.name || 'Destination'}`)
+        .bindPopup(`<b>Destination:</b><br/>${escapeHtml(destination.name || 'Destination')}`)
         .addTo(staticLayerRef.current);
       bounds.push(latLng);
     }
@@ -188,7 +194,7 @@ export const LeafletMap = ({
         if (stop.coordinates && stop.coordinates.length >= 2) {
           const latLng = [Number(stop.coordinates[1]), Number(stop.coordinates[0])];
           L.marker(latLng, { icon: createPinIcon('#64748B', stop.name) })
-            .bindPopup(`<b>Stop:</b> ${stop.name}`)
+            .bindPopup(`<b>Stop:</b> ${escapeHtml(stop.name || 'Confirmed stop')}`)
             .addTo(staticLayerRef.current);
           bounds.push(latLng);
         }

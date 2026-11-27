@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Bus, ChevronRight, AlertCircle, ArrowLeft, Clock } from 'lucide-react';
+import { Bus, ChevronRight, AlertCircle } from 'lucide-react';
 import { DashboardLayout } from '../../components/layout/DashboardLayout';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
@@ -13,6 +13,8 @@ export const AvailableBuses = () => {
   const destination = searchParams.get('destination') || '';
   const pickupLng = searchParams.get('pickupLng');
   const pickupLat = searchParams.get('pickupLat');
+  const destLng = searchParams.get('destLng');
+  const destLat = searchParams.get('destLat');
 
   const [buses, setBuses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -30,6 +32,10 @@ export const AvailableBuses = () => {
           params.pickupLng = pickupLng;
           params.pickupLat = pickupLat;
         }
+        if (destLng && destLat) {
+          params.destLng = destLng;
+          params.destLat = destLat;
+        }
         const res = await tripService.searchBuses(params);
         setBuses(res.buses || []);
       } catch (err) {
@@ -43,7 +49,9 @@ export const AvailableBuses = () => {
     };
 
     fetchBuses();
-  }, [pickup, destination, pickupLng, pickupLat]);
+    const refreshInterval = window.setInterval(fetchBuses, 15000);
+    return () => window.clearInterval(refreshInterval);
+  }, [pickup, destination, pickupLng, pickupLat, destLng, destLat]);
 
   return (
     <DashboardLayout
@@ -77,7 +85,24 @@ export const AvailableBuses = () => {
             {buses.map((bus) => (
               <div
                 key={bus.tripId}
-                onClick={() => navigate(`/passenger/tracking/${bus.tripId}?pickup=${encodeURIComponent(pickup)}&dest=${encodeURIComponent(destination)}`)}
+                onClick={async () => {
+                  try {
+                    await tripService.startTrackingHistory({
+                      tripId: bus.tripId,
+                      pickupName: pickup,
+                      pickupCoordinates:
+                        pickupLng && pickupLat ? [Number(pickupLng), Number(pickupLat)] : undefined,
+                      destinationName: destination,
+                      destinationCoordinates:
+                        destLng && destLat ? [Number(destLng), Number(destLat)] : undefined,
+                    });
+                  } catch {
+                    // Live tracking remains available if history persistence is temporarily unavailable.
+                  }
+                  navigate(
+                    `/passenger/tracking/${bus.tripId}?pickup=${encodeURIComponent(pickup)}&dest=${encodeURIComponent(destination)}&pickupLng=${encodeURIComponent(pickupLng || '')}&pickupLat=${encodeURIComponent(pickupLat || '')}&destLng=${encodeURIComponent(destLng || '')}&destLat=${encodeURIComponent(destLat || '')}`
+                  );
+                }}
                 className="bg-white p-4 sm:p-5 rounded-2xl border border-[#E2E8F0] shadow-xs hover:border-[#1769F4] hover:shadow-sm cursor-pointer transition-all flex items-center justify-between group"
               >
                 <div className="flex items-center space-x-4">

@@ -6,11 +6,19 @@ import { geocodeLocation } from '../services/geoapifyService.js';
 import { calculateETA } from '../services/etaService.js';
 import { ApiError } from '../utils/apiError.js';
 import { isValidCoordinates } from '../utils/validators.js';
+import { PassengerTrackingHistory } from '../models/PassengerTrackingHistory.js';
 
 // Start a new trip (Driver)
 export const startTrip = async (req, res, next) => {
   try {
-    const { busId, routeId, pickupPolicy, initialCoords } = req.body;
+    const {
+      busId,
+      routeId,
+      pickupPolicy,
+      initialCoords,
+      initialAccuracy,
+      initialTimestamp,
+    } = req.body;
 
     if (!busId || !routeId) {
       throw new ApiError(400, 'Bus ID and Route ID are required to start a trip');
@@ -22,6 +30,8 @@ export const startTrip = async (req, res, next) => {
       routeId,
       pickupPolicy,
       initialCoords,
+      initialAccuracy,
+      initialTimestamp,
     });
 
     res.status(201).json({
@@ -44,9 +54,15 @@ export const stopTrip = async (req, res, next) => {
     if (req.app.get('io')) {
       req.app.get('io').to(`trip:${id}`).emit('trip:ended', {
         tripId: id,
+        status: trip.status,
         endedAt: trip.endedAt,
+        reason: trip.status === 'CANCELLED' ? 'CANCELLED' : 'COMPLETED',
       });
     }
+    await PassengerTrackingHistory.updateMany(
+      { tripId: id, finalStatus: 'TRACKING' },
+      { $set: { finalStatus: trip.status, lastViewedAt: new Date() } }
+    );
 
     res.status(200).json({
       success: true,
@@ -84,19 +100,25 @@ export const searchBuses = async (req, res, next) => {
     let destCoords = null;
 
     // Check if coordinates were directly provided
-    if (pickupLat && pickupLng) {
+    if (pickupLat !== undefined || pickupLng !== undefined) {
+      if (!pickupLat || !pickupLng) throw new ApiError(400, 'Both pickupLat and pickupLng are required');
       const lat = parseFloat(pickupLat);
       const lng = parseFloat(pickupLng);
       if (isValidCoordinates(lng, lat)) {
         pickupCoords = [lng, lat];
+      } else {
+        throw new ApiError(400, 'Invalid pickup coordinates');
       }
     }
 
-    if (destLat && destLng) {
+    if (destLat !== undefined || destLng !== undefined) {
+      if (!destLat || !destLng) throw new ApiError(400, 'Both destLat and destLng are required');
       const lat = parseFloat(destLat);
       const lng = parseFloat(destLng);
       if (isValidCoordinates(lng, lat)) {
         destCoords = [lng, lat];
+      } else {
+        throw new ApiError(400, 'Invalid destination coordinates');
       }
     }
 
@@ -142,6 +164,14 @@ export const getTripById = async (req, res, next) => {
     if (!trip) {
       throw new ApiError(404, 'Trip not found');
     }
+    if (
+      req.user.role === 'DRIVER' &&
+      trip.driverId &&
+      trip.driverId._id &&
+      trip.driverId._id.toString() !== req.user._id.toString()
+    ) {
+      throw new ApiError(403, 'Unauthorized: You can only view your own trips');
+    }
 
     res.status(200).json({
       success: true,
@@ -161,6 +191,21 @@ export const getTripEta = async (req, res, next) => {
     const trip = await Trip.findById(id).populate('routeId');
     if (!trip || !trip.routeId) {
       throw new ApiError(404, 'Active trip or route not found');
+    }
+
+    if (trip.status !== 'ACTIVE') {
+      return res.status(200).json({
+        success: true,
+        eta: {
+          etaMinutes: 0,
+          remainingDistanceKm: 0,
+          status: 'TRIP_ENDED',
+        },
+        trackingStatus: 'UNAVAILABLE',
+        lastLocationUpdatedAt: trip.lastLocationUpdatedAt,
+        tripStatus: trip.status,
+        endedAt: trip.endedAt,
+      });
     }
 
     let pickupProgressKm = trip.routeId.totalDistanceKm;

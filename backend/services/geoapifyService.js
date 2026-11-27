@@ -5,6 +5,25 @@ import { ApiError } from '../utils/apiError.js';
 // Simple in-memory cache to reduce Geoapify API calls and preserve quota
 const routeCache = new Map();
 const geocodeCache = new Map();
+const CACHE_MAX_ENTRIES = 500;
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+const getCached = (cache, key) => {
+  const entry = cache.get(key);
+  if (!entry) return undefined;
+  if (Date.now() - entry.cachedAt > CACHE_TTL_MS) {
+    cache.delete(key);
+    return undefined;
+  }
+  return entry.value;
+};
+
+const setCached = (cache, key, value) => {
+  if (cache.size >= CACHE_MAX_ENTRIES) {
+    cache.delete(cache.keys().next().value);
+  }
+  cache.set(key, { value, cachedAt: Date.now() });
+};
 
 /**
  * Autocomplete place names using Geoapify
@@ -13,14 +32,11 @@ export const autocompletePlace = async (text) => {
   if (!text || text.trim().length < 2) return [];
 
   const cacheKey = `auto_${text.toLowerCase().trim()}`;
-  if (geocodeCache.has(cacheKey)) {
-    return geocodeCache.get(cacheKey);
-  }
+  const cachedAutocomplete = getCached(geocodeCache, cacheKey);
+  if (cachedAutocomplete !== undefined) return cachedAutocomplete;
 
   if (!ENV.GEOAPIFY_API_KEY) {
-    // If no API key configured, return empty array with a clear warning in logs
-    console.warn('[Geoapify] GEOAPIFY_API_KEY is not configured in backend/.env');
-    return [];
+    throw new ApiError(503, 'Geoapify API key is not configured');
   }
 
   try {
@@ -42,13 +58,20 @@ export const autocompletePlace = async (text) => {
         city: item.city || item.county || item.state,
         country: item.country,
       }));
-      geocodeCache.set(cacheKey, results);
+      setCached(geocodeCache, cacheKey, results);
       return results;
     }
     return [];
   } catch (error) {
+    if (error instanceof ApiError) throw error;
     console.error('[Geoapify Autocomplete Error]', error.response?.data || error.message);
-    return [];
+    if (error.response?.status === 401 || error.response?.status === 403) {
+      throw new ApiError(502, 'Geoapify rejected the configured API key');
+    }
+    if (error.response?.status === 429) {
+      throw new ApiError(429, 'Geoapify API quota exceeded');
+    }
+    throw new ApiError(502, 'Geoapify autocomplete service is unavailable');
   }
 };
 
@@ -61,9 +84,8 @@ export const geocodeLocation = async (placeName) => {
   }
 
   const cacheKey = `geo_${placeName.toLowerCase().trim()}`;
-  if (geocodeCache.has(cacheKey)) {
-    return geocodeCache.get(cacheKey);
-  }
+  const cachedLocation = getCached(geocodeCache, cacheKey);
+  if (cachedLocation !== undefined) return cachedLocation;
 
   if (!ENV.GEOAPIFY_API_KEY) {
     throw new ApiError(
@@ -83,7 +105,7 @@ export const geocodeLocation = async (placeName) => {
         lat: best.lat,
         lon: best.lon,
       };
-      geocodeCache.set(cacheKey, result);
+      setCached(geocodeCache, cacheKey, result);
       return result;
     }
     throw new ApiError(404, `Could not find coordinates for "${placeName}"`);
@@ -105,9 +127,8 @@ export const fetchRoadRoute = async (origin, destination) => {
   const destLon = destination.lon || destination.lng;
 
   const cacheKey = `route_${originLat.toFixed(4)},${originLon.toFixed(4)}_${destLat.toFixed(4)},${destLon.toFixed(4)}`;
-  if (routeCache.has(cacheKey)) {
-    return routeCache.get(cacheKey);
-  }
+  const cachedRoute = getCached(routeCache, cacheKey);
+  if (cachedRoute !== undefined) return cachedRoute;
 
   if (!ENV.GEOAPIFY_API_KEY) {
     throw new ApiError(
@@ -148,7 +169,7 @@ export const fetchRoadRoute = async (origin, destination) => {
       estimatedDurationMinutes: Math.round(timeSeconds / 60),
     };
 
-    routeCache.set(cacheKey, routeData);
+    setCached(routeCache, cacheKey, routeData);
     return routeData;
   } catch (error) {
     if (error instanceof ApiError) throw error;

@@ -2,6 +2,7 @@ import { ENV } from '../config/env.js';
 import { projectPointOnRoute } from '../utils/geoUtils.js';
 
 const etaCache = new Map();
+const ETA_CACHE_MAX_ENTRIES = 500;
 
 /**
  * Calculates accurate approximate ETA in minutes from current bus location to pickup point
@@ -42,6 +43,7 @@ export const getCachedTripETA = (tripId, busProgressKm, pickupProgressKm, route)
     if (now - cached.timestamp < ENV.ETA_REFRESH_INTERVAL_MS) {
       return cached.data;
     }
+    etaCache.delete(cacheKey);
   }
 
   const eta = calculateETA(
@@ -51,6 +53,9 @@ export const getCachedTripETA = (tripId, busProgressKm, pickupProgressKm, route)
     route.estimatedDurationMinutes
   );
 
+  if (etaCache.size >= ETA_CACHE_MAX_ENTRIES) {
+    etaCache.delete(etaCache.keys().next().value);
+  }
   etaCache.set(cacheKey, { timestamp: now, data: eta });
   return eta;
 };

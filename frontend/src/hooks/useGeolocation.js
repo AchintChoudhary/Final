@@ -10,6 +10,7 @@ export const useGeolocation = (options = {}) => {
     timeout = 10000,
     maximumAge = 0,
     autoStart = false,
+    maxAccuracyMeters = 100,
   } = options;
 
   const [location, setLocation] = useState(null); // { latitude, longitude, accuracy, heading, speed, timestamp }
@@ -17,6 +18,7 @@ export const useGeolocation = (options = {}) => {
   const [permissionState, setPermissionState] = useState('prompt'); // prompt, granted, denied
   const [isWatching, setIsWatching] = useState(false);
   const watchIdRef = useRef(null);
+  const fallbackWatchRef = useRef(false);
 
   // Check permission state if supported
   useEffect(() => {
@@ -33,6 +35,18 @@ export const useGeolocation = (options = {}) => {
 
   const handleSuccess = (position) => {
     const { latitude, longitude, accuracy, heading, speed } = position.coords;
+    if (
+      typeof accuracy !== 'number' ||
+      !Number.isFinite(accuracy) ||
+      accuracy > maxAccuracyMeters
+    ) {
+      setError(
+        typeof accuracy === 'number'
+          ? `GPS accuracy is too low (${Math.round(accuracy)} m). Move to an open area or wait for a better fix.`
+          : 'GPS fix did not include an accuracy measurement.'
+      );
+      return;
+    }
     setLocation({
       latitude,
       longitude,
@@ -47,6 +61,9 @@ export const useGeolocation = (options = {}) => {
 
   const handleError = (err) => {
     let message = 'Unable to retrieve location';
+    if (!window.isSecureContext) {
+      message = 'Location access requires HTTPS or localhost.';
+    }
     if (err.code === 1) {
       message = 'Location permission was denied. Please allow GPS access in your browser.';
       setPermissionState('denied');
@@ -70,7 +87,23 @@ export const useGeolocation = (options = {}) => {
     setIsWatching(true);
     watchIdRef.current = navigator.geolocation.watchPosition(
       handleSuccess,
-      handleError,
+      (err) => {
+        handleError(err);
+        if (
+          err.code === 3 &&
+          enableHighAccuracy &&
+          !fallbackWatchRef.current &&
+          watchIdRef.current !== null
+        ) {
+          fallbackWatchRef.current = true;
+          navigator.geolocation.clearWatch(watchIdRef.current);
+          watchIdRef.current = navigator.geolocation.watchPosition(
+            handleSuccess,
+            handleError,
+            { enableHighAccuracy: false, timeout: timeout * 2, maximumAge }
+          );
+        }
+      },
       { enableHighAccuracy, timeout, maximumAge }
     );
   }, [enableHighAccuracy, timeout, maximumAge]);
@@ -81,6 +114,7 @@ export const useGeolocation = (options = {}) => {
       navigator.geolocation.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
     }
+    fallbackWatchRef.current = false;
     setIsWatching(false);
   }, []);
 
@@ -92,20 +126,43 @@ export const useGeolocation = (options = {}) => {
         setError(msg);
         return reject(new Error(msg));
       }
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          handleSuccess(pos);
-          resolve({
-            latitude: pos.coords.latitude,
-            longitude: pos.coords.longitude,
-          });
-        },
-        (err) => {
-          handleError(err);
-          reject(err);
-        },
-        { enableHighAccuracy, timeout: 15000, maximumAge: 0 }
-      );
+      const acquire = (highAccuracy) => {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            const accuracy = pos.coords.accuracy;
+            if (
+              typeof accuracy !== 'number' ||
+              !Number.isFinite(accuracy) ||
+              accuracy > maxAccuracyMeters
+            ) {
+              const msg =
+                typeof accuracy === 'number'
+                  ? `GPS accuracy is too low (${Math.round(accuracy)} m).`
+                  : 'GPS fix did not include an accuracy measurement.';
+              setError(msg);
+              reject(new Error(msg));
+              return;
+            }
+            handleSuccess(pos);
+            resolve({
+              latitude: pos.coords.latitude,
+              longitude: pos.coords.longitude,
+              accuracy,
+              timestamp: pos.timestamp,
+            });
+          },
+          (err) => {
+            if (highAccuracy && err.code !== 1 && enableHighAccuracy) {
+              acquire(false);
+              return;
+            }
+            handleError(err);
+            reject(err);
+          },
+          { enableHighAccuracy: highAccuracy, timeout: highAccuracy ? 15000 : timeout * 2, maximumAge: 0 }
+        );
+      };
+      acquire(enableHighAccuracy);
     });
   }, [enableHighAccuracy]);
 

@@ -8,13 +8,14 @@ import {
 } from '../controllers/routeController.js';
 import { protect } from '../middleware/authMiddleware.js';
 import { requireRole } from '../middleware/roleMiddleware.js';
+import { validateObjectIdParam } from '../middleware/validateMiddleware.js';
 
 const router = express.Router();
 
-router.get('/autocomplete', autocomplete);
-router.get('/preview', previewRoute);
+router.get('/autocomplete', protect, requireRole('DRIVER'), autocomplete);
+router.get('/preview', protect, requireRole('DRIVER'), previewRoute);
 router.post('/', protect, requireRole('DRIVER'), createRoute);
-router.get('/:id', getRouteById);
-router.get('/', getAllRoutes);
+router.get('/:id', protect, validateObjectIdParam('id'), getRouteById);
+router.get('/', protect, getAllRoutes);
 
 export default router;

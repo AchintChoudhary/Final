@@ -25,7 +25,8 @@ export const useSocket = (tripId = null) => {
 
     socket.on('connect', () => {
       setIsConnected(true);
-      if (tripId) {
+      const savedUser = JSON.parse(localStorage.getItem('user') || 'null');
+      if (tripId && savedUser?.role === 'PASSENGER') {
         socket.emit('passenger:joinTrip', { tripId });
       }
     });
@@ -36,6 +37,10 @@ export const useSocket = (tripId = null) => {
 
     socket.on('trip:initialState', (state) => {
       setTripState(state);
+      if (state.status === 'COMPLETED' || state.status === 'CANCELLED') {
+        setIsTripEnded(true);
+        setTrackingStatus('UNAVAILABLE');
+      }
       if (state.currentLocation) {
         setLiveLocation(state.currentLocation);
       }
@@ -85,7 +90,6 @@ export const useSocket = (tripId = null) => {
   );
 
   return {
-    socket: socketRef.current,
     isConnected,
     liveLocation,
     tripState,

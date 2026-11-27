@@ -65,6 +65,20 @@ export const createRoute = async (req, res, next) => {
     if (!name || !origin || !destination || !geometry || !geometry.coordinates) {
       throw new ApiError(400, 'Complete route information including geometry is required');
     }
+    if (!Array.isArray(geometry.coordinates) || geometry.coordinates.length < 2) {
+      throw new ApiError(400, 'A valid confirmed LineString geometry is required');
+    }
+    if (
+      !Array.isArray(origin.coordinates) ||
+      origin.coordinates.length !== 2 ||
+      !Array.isArray(destination.coordinates) ||
+      destination.coordinates.length !== 2
+    ) {
+      throw new ApiError(400, 'Valid route origin and destination coordinates are required');
+    }
+    if (!['FIXED', 'FLEXIBLE', 'BOTH'].includes(pickupPolicy || 'BOTH')) {
+      throw new ApiError(400, 'Invalid pickup policy');
+    }
 
     // Process and sort stops with route progress
     let processedStops = [];
@@ -117,6 +131,14 @@ export const getRouteById = async (req, res, next) => {
     const route = await Route.findById(req.params.id);
     if (!route) {
       throw new ApiError(404, 'Route not found');
+    }
+    if (
+      req.user &&
+      req.user.role === 'DRIVER' &&
+      route.createdBy &&
+      route.createdBy.toString() !== req.user._id.toString()
+    ) {
+      throw new ApiError(403, 'Unauthorized: You can only view routes you created');
     }
     res.status(200).json({
       success: true,

@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
-import { Bus, Clock, MapPin, Radio, ListOrdered, AlertTriangle } from 'lucide-react';
+import { Bus, Clock, MapPin, ListOrdered, AlertTriangle } from 'lucide-react';
 import { DashboardLayout } from '../../components/layout/DashboardLayout';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { LeafletMap } from '../../components/maps/LeafletMap';
@@ -14,16 +14,20 @@ export const LiveTracking = () => {
   const [searchParams] = useSearchParams();
   const pickupName = searchParams.get('pickup') || 'Pickup Point';
   const destName = searchParams.get('dest') || 'Destination';
+  const pickupLng = searchParams.get('pickupLng');
+  const pickupLat = searchParams.get('pickupLat');
+  const destLng = searchParams.get('destLng');
+  const destLat = searchParams.get('destLat');
 
   const [trip, setTrip] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [, setError] = useState('');
   const [eta, setEta] = useState(null);
 
   const navigate = useNavigate();
 
   // Real-time Socket.IO subscription
-  const { liveLocation, trackingStatus, lastUpdate, isTripEnded } = useSocket(tripId);
+  const { liveLocation, lastUpdate, isTripEnded } = useSocket(tripId);
 
   useEffect(() => {
     const fetchTrip = async () => {
@@ -32,7 +36,9 @@ export const LiveTracking = () => {
         setTrip(res.trip);
 
         // Fetch ETA
-        const etaRes = await tripService.getTripEta(tripId);
+        const pickupCoords =
+          pickupLng && pickupLat ? [Number(pickupLng), Number(pickupLat)] : null;
+        const etaRes = await tripService.getTripEta(tripId, pickupCoords);
         setEta(etaRes.eta);
       } catch (err) {
         setError(err.response?.data?.message || 'Failed to fetch trip details');
@@ -42,7 +48,7 @@ export const LiveTracking = () => {
     };
 
     fetchTrip();
-  }, [tripId]);
+  }, [tripId, pickupLng, pickupLat]);
 
   if (loading) {
     return (
@@ -65,7 +71,9 @@ export const LiveTracking = () => {
 
   const bus = trip.busId;
   const route = trip.routeId;
-  const currentCoords = liveLocation || trip.currentLocation?.coordinates || route?.origin?.coordinates;
+  const currentCoords =
+    liveLocation ||
+    (trip.status === 'ACTIVE' ? trip.currentLocation?.coordinates : null);
 
   return (
     <DashboardLayout
@@ -78,7 +86,7 @@ export const LiveTracking = () => {
         {isTripEnded && (
           <div className="p-4 bg-[#FEE2E2] text-[#EF4444] rounded-xl border border-[#FECACA] flex items-center space-x-2 text-sm font-medium">
             <AlertTriangle size={18} />
-            <span>This trip has concluded. The bus has arrived at its final destination.</span>
+            <span>The driver has ended this trip. Live tracking is no longer available.</span>
           </div>
         )}
 
@@ -113,6 +121,9 @@ export const LiveTracking = () => {
               destination={route?.destination}
               busLocation={currentCoords}
               stops={route?.stops || []}
+              pickupLocation={
+                pickupLng && pickupLat ? [Number(pickupLng), Number(pickupLat)] : null
+              }
               height="380px"
             />
           </div>
@@ -142,7 +153,11 @@ export const LiveTracking = () => {
           <PrimaryButton
             variant="outline"
             icon={ListOrdered}
-            onClick={() => navigate(`/passenger/trip/${tripId}?pickup=${encodeURIComponent(pickupName)}&dest=${encodeURIComponent(destName)}`)}
+            onClick={() =>
+              navigate(
+                `/passenger/trip/${tripId}?pickup=${encodeURIComponent(pickupName)}&dest=${encodeURIComponent(destName)}&pickupLng=${encodeURIComponent(pickupLng || '')}&pickupLat=${encodeURIComponent(pickupLat || '')}&destLng=${encodeURIComponent(destLng || '')}&destLat=${encodeURIComponent(destLat || '')}`
+              )
+            }
           >
             View Route Stops & Progress (My Trip)
           </PrimaryButton>

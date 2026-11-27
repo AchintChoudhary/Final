@@ -47,14 +47,17 @@ const tripSchema = new mongoose.Schema(
     lastLocationUpdatedAt: {
       type: Date,
     },
+    lastGpsMeasuredAt: {
+      type: Date,
+    },
     routeProgressKm: {
       type: Number,
       default: 0,
     },
     trackingStatus: {
       type: String,
-      enum: ['ONLINE', 'STALE', 'UNAVAILABLE'],
-      default: 'ONLINE',
+      enum: ['CONNECTING', 'UNKNOWN', 'ONLINE', 'STALE', 'UNAVAILABLE'],
+      default: 'CONNECTING',
     },
     lastGpsAccuracyMeters: {
       type: Number,
@@ -72,5 +75,13 @@ const tripSchema = new mongoose.Schema(
 tripSchema.index({ currentLocation: '2dsphere' });
 tripSchema.index({ driverId: 1, status: 1 });
 tripSchema.index({ busId: 1, status: 1 });
+tripSchema.index(
+  { driverId: 1 },
+  { unique: true, partialFilterExpression: { status: 'ACTIVE' }, name: 'unique_active_driver_trip' }
+);
+tripSchema.index(
+  { busId: 1 },
+  { unique: true, partialFilterExpression: { status: 'ACTIVE' }, name: 'unique_active_bus_trip' }
+);
 
 export const Trip = mongoose.model('Trip', tripSchema);

@@ -16,7 +16,19 @@ export const calculateTotalDistance = (coordinates) => {
  * - distance along the route (progress from start) in kilometers
  */
 export const projectPointOnRoute = (pointCoords, routeCoordinates) => {
-  if (!pointCoords || !routeCoordinates || routeCoordinates.length < 2) {
+  if (
+    !Array.isArray(pointCoords) ||
+    pointCoords.length !== 2 ||
+    !pointCoords.every((value) => typeof value === 'number' && Number.isFinite(value)) ||
+    !Array.isArray(routeCoordinates) ||
+    routeCoordinates.length < 2 ||
+    routeCoordinates.some(
+      (coords) =>
+        !Array.isArray(coords) ||
+        coords.length !== 2 ||
+        !coords.every((value) => typeof value === 'number' && Number.isFinite(value))
+    )
+  ) {
     return null;
   }
   const pt = turf.point(pointCoords); // [lng, lat]

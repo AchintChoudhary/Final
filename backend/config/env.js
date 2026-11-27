@@ -17,3 +17,10 @@ export const ENV = {
   ETA_REFRESH_INTERVAL_MS: parseInt(process.env.ETA_REFRESH_INTERVAL_MS, 10) || 60000,
   BCRYPT_SALT_ROUNDS: parseInt(process.env.BCRYPT_SALT_ROUNDS, 10) || 12,
 };
+
+if (ENV.NODE_ENV === 'production') {
+  if (!process.env.MONGODB_URI) throw new Error('MONGODB_URI is required in production');
+  if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET is required in production');
+  if (!process.env.GEOAPIFY_API_KEY) throw new Error('GEOAPIFY_API_KEY is required in production');
+  if (!process.env.CLIENT_URL) throw new Error('CLIENT_URL is required in production');
+}

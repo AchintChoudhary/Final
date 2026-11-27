@@ -10,7 +10,12 @@ const server = http.createServer(app);
 // Socket.IO configuration
 const io = new SocketIOServer(server, {
   cors: {
-    origin: [ENV.CLIENT_URL, 'http://localhost:5173', 'http://127.0.0.1:5173'],
+    origin: [
+      ENV.CLIENT_URL,
+      'https://final-five-gray-53.vercel.app',
+      'http://localhost:5173',
+      'http://127.0.0.1:5173',
+    ].filter(Boolean),
     methods: ['GET', 'POST'],
     credentials: true,
   },
@@ -20,12 +25,17 @@ app.set('io', io);
 setupSocketIO(io);
 
 const startServer = async () => {
+  const connected = await connectDB();
+  if (!connected) {
+    console.error('[Server] MongoDB unavailable. Refusing to accept dependent traffic.');
+    process.exitCode = 1;
+    return;
+  }
+
   server.listen(ENV.PORT, () => {
     console.log(`[Server] Real-Time Public Transport Backend running on port ${ENV.PORT} (${ENV.NODE_ENV})`);
     console.log(`[Server] API Health check available at http://localhost:${ENV.PORT}/api/health`);
   });
-
-  await connectDB();
 };
 
 startServer();

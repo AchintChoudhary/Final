@@ -15,24 +15,30 @@ export const setupSocketIO = (io) => {
 
       if (!token) {
         socket.user = null;
-        return next();
+        return next(new Error('Authentication required'));
       }
 
       const decoded = jwt.verify(token, ENV.JWT_SECRET);
       const user = await User.findById(decoded.id);
-      if (user) {
-        socket.user = user;
+      if (!user) {
+        socket.user = null;
+        return next(new Error('User no longer exists'));
       }
-      next();
+      socket.user = user;
+      return next();
     } catch (err) {
       socket.user = null;
-      next();
+      next(new Error('Invalid or expired authentication token'));
     }
   });
 
   io.on('connection', (socket) => {
+    let locationEventTimestamps = [];
     // Passenger joins a trip room
     socket.on('passenger:joinTrip', async ({ tripId }) => {
+      if (!socket.user || socket.user.role !== 'PASSENGER') {
+        return socket.emit('error', { message: 'Authentication as Passenger required to join tracking' });
+      }
       if (!tripId) return;
       const room = `trip:${tripId}`;
       socket.join(room);
@@ -66,7 +72,16 @@ export const setupSocketIO = (io) => {
     // Driver sends live GPS location update
     socket.on('driver:location', async (data) => {
       try {
-        const { tripId, latitude, longitude, accuracy, sequence } = data;
+        const now = Date.now();
+        locationEventTimestamps = locationEventTimestamps.filter((timestamp) => now - timestamp < 10000);
+        if (locationEventTimestamps.length >= 40) {
+          return socket.emit('driver:locationAck', {
+            accepted: false,
+            reason: 'GPS update rate limit exceeded',
+          });
+        }
+        locationEventTimestamps.push(now);
+        const { tripId, latitude, longitude, accuracy, sequence, timestamp } = data;
 
         if (!socket.user || socket.user.role !== 'DRIVER') {
           return socket.emit('error', { message: 'Authentication as Driver required to send GPS' });
@@ -82,13 +97,26 @@ export const setupSocketIO = (io) => {
           driverId: socket.user._id,
           latitude,
           longitude,
-          accuracy: accuracy || 10,
-          sequence: sequence || Date.now(),
+          accuracy,
+          sequence,
+          timestamp,
         });
 
         if (result.skipped) {
-          return;
+          return socket.emit('driver:locationAck', {
+            tripId,
+            accepted: false,
+            reason: result.reason,
+          });
         }
+
+        socket.emit('driver:locationAck', {
+          tripId,
+          accepted: true,
+          sequence,
+          routeProgressKm: result.routeProgressKm,
+          lastLocationUpdatedAt: result.lastLocationUpdatedAt,
+        });
 
         // Broadcast to all passengers tracking this trip
         io.to(`trip:${tripId}`).emit('trip:locationUpdated', {

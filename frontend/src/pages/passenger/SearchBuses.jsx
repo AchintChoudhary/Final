@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Compass, Locate, AlertCircle, ArrowRight } from 'lucide-react';
+import { Compass, Locate, AlertCircle } from 'lucide-react';
 import { DashboardLayout } from '../../components/layout/DashboardLayout';
 import { LocationAutocomplete } from '../../components/common/LocationAutocomplete';
 import { PrimaryButton } from '../../components/common/PrimaryButton';
@@ -10,6 +10,7 @@ export const SearchBuses = () => {
   const [pickup, setPickup] = useState('');
   const [destination, setDestination] = useState('');
   const [pickupCoords, setPickupCoords] = useState(null);
+  const [destinationCoords, setDestinationCoords] = useState(null);
   const [locating, setLocating] = useState(false);
   const [error, setError] = useState('');
 
@@ -24,7 +25,7 @@ export const SearchBuses = () => {
       setPickupCoords([pos.longitude, pos.latitude]);
       setPickup('My Current Location');
     } catch (err) {
-      setError('Could not access current GPS location. Please check browser permissions.');
+      setError(err?.message || 'Could not access current GPS location.');
     } finally {
       setLocating(false);
     }
@@ -42,6 +43,9 @@ export const SearchBuses = () => {
     let url = `/passenger/available-buses?pickup=${encodeURIComponent(pickup)}&destination=${encodeURIComponent(destination)}`;
     if (pickupCoords) {
       url += `&pickupLng=${pickupCoords[0]}&pickupLat=${pickupCoords[1]}`;
+    }
+    if (destinationCoords) {
+      url += `&destLng=${destinationCoords[0]}&destLat=${destinationCoords[1]}`;
     }
 
     navigate(url);
@@ -95,8 +99,15 @@ export const SearchBuses = () => {
             <LocationAutocomplete
               label="Final Destination"
               value={destination}
-              onChange={(val) => setDestination(val)}
-            
+              onChange={(val) => {
+                setDestination(val);
+                setDestinationCoords(null);
+              }}
+              onSelect={(item) => {
+                if (item.lon && item.lat) {
+                  setDestinationCoords([item.lon, item.lat]);
+                }
+              }}
               required
             />
 

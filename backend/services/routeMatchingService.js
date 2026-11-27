@@ -42,6 +42,7 @@ export class RouteMatchingService {
       if (!route || !route.geometry || !route.geometry.coordinates || route.geometry.coordinates.length < 2) {
         continue;
       }
+      if (!bus || !bus._id) continue;
 
       // Check GPS freshness: stale or unavailable warning
       let trackingStatus = trip.trackingStatus || 'ONLINE';
@@ -53,6 +54,7 @@ export class RouteMatchingService {
           trackingStatus = 'STALE';
         }
       }
+      if (!trip.lastLocationUpdatedAt || trackingStatus !== 'ONLINE') continue;
 
       const routeCoordinates = route.geometry.coordinates; // [[lng, lat], ...]
 
@@ -85,9 +87,23 @@ export class RouteMatchingService {
         continue;
       }
 
-      // Step 5: Exclude Passed Buses
-      // If the bus has already reached or passed the passenger's pickup location:
-      if (busProgressKm >= pickupProgressKm) {
+      const busCoords = trip.currentLocation?.coordinates;
+      const busProjection = Array.isArray(busCoords)
+        ? projectPointOnRoute(busCoords, routeCoordinates)
+        : null;
+      if (
+        !busProjection ||
+        busProjection.distanceFromRouteMeters > toleranceMeters * 2
+      ) {
+        continue;
+      }
+
+      const arrivalToleranceKm = Math.max(toleranceMeters, 500) / 1000;
+      const progressDifferenceKm = pickupProgressKm - busProgressKm;
+      let pickupStatus = 'APPROACHING';
+      if (Math.abs(progressDifferenceKm) <= arrivalToleranceKm) {
+        pickupStatus = 'ARRIVED';
+      } else if (progressDifferenceKm < 0) {
         continue;
       }
 
@@ -113,6 +129,18 @@ export class RouteMatchingService {
         pickupType = 'FIXED_STOP';
       }
 
+      const destinationStopsNearPoint = (route.stops || []).filter((stop) => {
+        if (!stop.dropOffAllowed || !Array.isArray(stop.coordinates)) return false;
+        const stopProjection = projectPointOnRoute(stop.coordinates, routeCoordinates);
+        return (
+          stopProjection &&
+          Math.abs(stopProjection.progressKm - destinationProgressKm) * 1000 <= toleranceMeters
+        );
+      });
+      if (policy === 'FIXED' && destinationStopsNearPoint.length === 0) {
+        continue;
+      }
+
       // Step 7: Calculate accurate ETA and remaining distance
       const etaInfo = getCachedTripETA(trip._id, busProgressKm, pickupProgressKm, route);
 
@@ -134,6 +162,7 @@ export class RouteMatchingService {
         pickupProgressKm: +pickupProgressKm.toFixed(2),
         destinationProgressKm: +destinationProgressKm.toFixed(2),
         trackingStatus: trackingStatus,
+        pickupStatus,
         lastLocationUpdatedAt: trip.lastLocationUpdatedAt,
         etaMinutes: etaInfo.etaMinutes,
         remainingDistanceKm: etaInfo.remainingDistanceKm,

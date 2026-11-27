@@ -7,6 +7,8 @@ const router = express.Router();
 // In-memory cache for recent map tiles to reduce upstream latency and bandwidth
 const tileCache = new Map();
 const MAX_TILE_CACHE = 1000;
+const TILE_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const ALLOWED_TILE_STYLES = new Set(['osm-carto', 'osm-bright', 'klokantech-basic']);
 
 /**
  * Secure Backend Map Tile Proxy
@@ -16,6 +18,9 @@ const MAX_TILE_CACHE = 1000;
 router.get('/:z/:x/:y.png', async (req, res) => {
   const { z, x, y } = req.params;
   const style = req.query.style || 'osm-carto';
+  if (!ALLOWED_TILE_STYLES.has(style)) {
+    return res.status(400).send('Invalid map style');
+  }
 
   const zInt = parseInt(z, 10);
   const xInt = parseInt(x, 10);
@@ -28,7 +33,9 @@ router.get('/:z/:x/:y.png', async (req, res) => {
     zInt < 0 ||
     zInt > 20 ||
     xInt < 0 ||
-    yInt < 0
+    yInt < 0 ||
+    xInt >= 2 ** zInt ||
+    yInt >= 2 ** zInt
   ) {
     return res.status(400).send('Invalid tile coordinates');
   }
@@ -38,9 +45,13 @@ router.get('/:z/:x/:y.png', async (req, res) => {
   // Serve from cache if available
   if (tileCache.has(cacheKey)) {
     const cached = tileCache.get(cacheKey);
+    if (Date.now() - cached.cachedAt > TILE_CACHE_TTL_MS) {
+      tileCache.delete(cacheKey);
+    } else {
     res.setHeader('Content-Type', cached.contentType || 'image/png');
     res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=86400');
     return res.send(cached.data);
+    }
   }
 
   // 1. Fetch from Geoapify using backend API key
@@ -60,7 +71,7 @@ router.get('/:z/:x/:y.png', async (req, res) => {
         const firstKey = tileCache.keys().next().value;
         tileCache.delete(firstKey);
       }
-      tileCache.set(cacheKey, { data: buffer, contentType });
+      tileCache.set(cacheKey, { data: buffer, contentType, cachedAt: Date.now() });
 
       res.setHeader('Content-Type', contentType);
       res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=86400');

@@ -12,6 +12,7 @@ import busRoutes from './routes/busRoutes.js';
 import routeRoutes from './routes/routeRoutes.js';
 import tripRoutes from './routes/tripRoutes.js';
 import tileRoutes from './routes/tileRoutes.js';
+import passengerHistoryRoutes from './routes/passengerHistoryRoutes.js';
 
 const app = express();
 
@@ -25,7 +26,12 @@ app.use(
 // CORS configuration
 app.use(
   cors({
-    origin: [ENV.CLIENT_URL, 'http://localhost:5173', 'http://127.0.0.1:5173'],
+    origin: [
+      ENV.CLIENT_URL,
+      'https://final-five-gray-53.vercel.app',
+      'http://localhost:5173',
+      'http://127.0.0.1:5173',
+    ].filter(Boolean),
     credentials: true,
   })
 );
@@ -44,6 +50,14 @@ const limiter = rateLimit({
   message: { success: false, message: 'Too many requests from this IP, please try again later.' },
 });
 app.use('/api', limiter);
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many authentication attempts. Please try again later.' },
+});
+app.use('/api/auth/login', authLimiter);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -61,6 +75,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/buses', busRoutes);
 app.use('/api/routes', routeRoutes);
 app.use('/api/trips', tripRoutes);
+app.use('/api/passenger-history', passengerHistoryRoutes);
 
 // 404 Route handler
 app.use((req, res, next) => {

@@ -61,6 +61,9 @@ export const getBusById = async (req, res, next) => {
     if (!bus) {
       throw new ApiError(404, 'Bus not found');
     }
+    if (req.user.role === 'DRIVER' && bus.driverId.toString() !== req.user._id.toString()) {
+      throw new ApiError(403, 'Unauthorized: You can only view your own bus');
+    }
     res.status(200).json({
       success: true,
       bus,
@@ -80,6 +83,11 @@ export const updateBus = async (req, res, next) => {
 
     if (bus.driverId.toString() !== req.user._id.toString()) {
       throw new ApiError(403, 'Unauthorized: You can only edit your own registered bus');
+    }
+
+    const activeTrip = await Trip.findOne({ busId: bus._id, status: 'ACTIVE' });
+    if (activeTrip) {
+      throw new ApiError(400, 'Bus details cannot be changed while the bus has an active trip');
     }
 
     const { busName, startLocation, finalDestination, plateNumber } = req.body;

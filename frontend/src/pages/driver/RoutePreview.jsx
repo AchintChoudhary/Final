@@ -1,12 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { MapPin, Navigation, AlertCircle, AlertTriangle, ArrowLeft } from 'lucide-react';
+import { Navigation, AlertCircle, AlertTriangle, ArrowLeft } from 'lucide-react';
 import { DashboardLayout } from '../../components/layout/DashboardLayout';
 import { LeafletMap } from '../../components/maps/LeafletMap';
 import { PrimaryButton } from '../../components/common/PrimaryButton';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import { routeService } from '../../services/routeService';
 import { tripService } from '../../services/tripService';
+import { useGeolocation } from '../../hooks/useGeolocation';
 
 // Haversine distance in km between two [lng, lat] points
 const calculateDistanceKm = (coord1, coord2) => {
@@ -38,10 +39,14 @@ export const RoutePreview = () => {
   const [gpsWarning, setGpsWarning] = useState('');
 
   const navigate = useNavigate();
+  const { getCurrentPosition } = useGeolocation({
+    enableHighAccuracy: true,
+    timeout: 15000,
+    maxAccuracyMeters: 100,
+  });
 
   useEffect(() => {
     if (!originName || !destinationName) {
-      setLoading(false);
       return;
     }
 
@@ -72,30 +77,8 @@ export const RoutePreview = () => {
 
     try {
       // 1. Acquire fresh device GPS reading
-      const position = await new Promise((resolve, reject) => {
-        if (!navigator.geolocation) {
-          return reject(
-            new Error('Geolocation is not supported by your browser. Live device GPS is required.')
-          );
-        }
-        navigator.geolocation.getCurrentPosition(
-          (pos) => resolve(pos),
-          (err) => {
-            let msg = 'Failed to acquire device GPS position.';
-            if (err.code === 1) {
-              msg = 'Location permission was denied. Please allow location access in your browser settings to start live trip tracking.';
-            } else if (err.code === 2) {
-              msg = 'GPS position unavailable. Please ensure your device GPS is turned on.';
-            } else if (err.code === 3) {
-              msg = 'GPS location request timed out. Please try again in an area with good reception.';
-            }
-            reject(new Error(msg));
-          },
-          { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-        );
-      });
-
-      const { longitude, latitude, accuracy } = position.coords;
+      const position = await getCurrentPosition();
+      const { longitude, latitude, accuracy, timestamp } = position;
       const initialCoords = [longitude, latitude];
 
       // Check distance from real GPS to route origin
@@ -136,6 +119,8 @@ export const RoutePreview = () => {
           routeId: confirmedRoute._id,
           pickupPolicy: 'BOTH',
           initialCoords,
+          initialAccuracy: accuracy,
+          initialTimestamp: new Date(timestamp).toISOString(),
         });
         navigate('/driver/active-trip');
       } else {
