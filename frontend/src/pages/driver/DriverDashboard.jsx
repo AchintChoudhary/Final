@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bus, MapPin, Clock, ArrowRight, Play, AlertCircle } from 'lucide-react';
+import { Bus, MapPin, Clock, Play, AlertCircle } from 'lucide-react';
 import { DashboardLayout } from '../../components/layout/DashboardLayout';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { PrimaryButton } from '../../components/common/PrimaryButton';
@@ -8,12 +8,10 @@ import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import { EmptyState } from '../../components/common/EmptyState';
 import { busService } from '../../services/busService';
 import { tripService } from '../../services/tripService';
-import { routeService } from '../../services/routeService';
 
 export const DriverDashboard = () => {
   const [buses, setBuses] = useState([]);
   const [activeTrip, setActiveTrip] = useState(null);
-  const [routes, setRoutes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const navigate = useNavigate();
@@ -21,15 +19,13 @@ export const DriverDashboard = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [busRes, tripRes, routeRes] = await Promise.all([
+        const [busRes, tripRes] = await Promise.all([
           busService.getMyBuses(),
           tripService.getMyActiveTrip(),
-          routeService.getAllRoutes(),
         ]);
         setBuses(busRes.buses || []);
         setActiveTrip(tripRes.trip || null);
-        setRoutes(routeRes.routes || []);
-      } catch (err) {
+      } catch {
         setError('Failed to load dashboard data');
       } finally {
         setLoading(false);

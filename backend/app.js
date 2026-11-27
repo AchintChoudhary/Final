@@ -27,12 +27,19 @@ app.use(
 // CORS configuration
 app.use(
   cors({
-    origin: [
-      ENV.CLIENT_URL,
-      'https://final-five-gray-53.vercel.app',
-      'http://localhost:5173',
-      'http://127.0.0.1:5173',
-    ].filter(Boolean),
+    origin: (origin, callback) => {
+      const allowedOrigins = [
+        ENV.CLIENT_URL,
+        'https://final-five-gray-53.vercel.app',
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
+      ].filter(Boolean);
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     credentials: true,
   })
 );

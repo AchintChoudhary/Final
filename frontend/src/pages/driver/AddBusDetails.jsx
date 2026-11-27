@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bus, MapPin, AlertCircle } from 'lucide-react';
+import { Bus, AlertCircle } from 'lucide-react';
 import { DashboardLayout } from '../../components/layout/DashboardLayout';
 import { InputField } from '../../components/common/InputField';
 import { LocationAutocomplete } from '../../components/common/LocationAutocomplete';

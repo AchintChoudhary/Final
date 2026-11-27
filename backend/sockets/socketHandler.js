@@ -4,6 +4,7 @@ import { User } from '../models/User.js';
 import { Trip } from '../models/Trip.js';
 import { TripService } from '../services/tripService.js';
 import { isValidCoordinates } from '../utils/validators.js';
+import mongoose from 'mongoose';
 
 export const setupSocketIO = (io) => {
   // Socket authentication middleware
@@ -39,7 +40,9 @@ export const setupSocketIO = (io) => {
       if (!socket.user || socket.user.role !== 'PASSENGER') {
         return socket.emit('error', { message: 'Authentication as Passenger required to join tracking' });
       }
-      if (!tripId) return;
+      if (!mongoose.isValidObjectId(tripId)) {
+        return socket.emit('error', { message: 'Invalid trip ID' });
+      }
       const room = `trip:${tripId}`;
       socket.join(room);
 
@@ -56,6 +59,8 @@ export const setupSocketIO = (io) => {
             trackingStatus: trip.trackingStatus,
             lastLocationUpdatedAt: trip.lastLocationUpdatedAt,
           });
+        } else {
+          socket.emit('error', { message: 'Trip not found' });
         }
       } catch (err) {
         console.error(`[Socket] Error fetching initial trip state for ${tripId}:`, err.message);
@@ -64,7 +69,7 @@ export const setupSocketIO = (io) => {
 
     // Passenger leaves trip room
     socket.on('passenger:leaveTrip', ({ tripId }) => {
-      if (tripId) {
+      if (mongoose.isValidObjectId(tripId)) {
         socket.leave(`trip:${tripId}`);
       }
     });
@@ -76,6 +81,7 @@ export const setupSocketIO = (io) => {
         locationEventTimestamps = locationEventTimestamps.filter((timestamp) => now - timestamp < 10000);
         if (locationEventTimestamps.length >= 40) {
           return socket.emit('driver:locationAck', {
+            tripId: data?.tripId,
             accepted: false,
             reason: 'GPS update rate limit exceeded',
           });
@@ -87,7 +93,7 @@ export const setupSocketIO = (io) => {
           return socket.emit('error', { message: 'Authentication as Driver required to send GPS' });
         }
 
-        if (!tripId || !isValidCoordinates(longitude, latitude)) {
+        if (!mongoose.isValidObjectId(tripId) || !isValidCoordinates(longitude, latitude)) {
           return socket.emit('error', { message: 'Invalid GPS coordinates or trip ID' });
         }
 
@@ -139,7 +145,7 @@ export const setupSocketIO = (io) => {
   });
 
   // Background watchdog for stale trips
-  setInterval(async () => {
+  const watchdogTimer = setInterval(async () => {
     try {
       const staleThreshold = new Date(Date.now() - ENV.GPS_STALE_WARNING_MS);
       const unavailableThreshold = new Date(Date.now() - ENV.GPS_UNAVAILABLE_MS);
@@ -180,4 +186,5 @@ export const setupSocketIO = (io) => {
       // quiet catch
     }
   }, 15000);
+  return watchdogTimer;
 };

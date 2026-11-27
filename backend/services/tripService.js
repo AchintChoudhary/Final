@@ -164,7 +164,7 @@ export class TripService {
       if (
         destinationProjection &&
         currentProjection &&
-        currentProjection.progressKm >= trip.routeId.totalDistanceKm * 0.98 &&
+        currentProjection.progressKm >= destinationProjection.progressKm - 0.05 &&
         destinationProjection.distanceFromRouteMeters <= ENV.ROUTE_MATCH_TOLERANCE_METERS &&
         currentProjection.distanceFromRouteMeters <= ENV.ROUTE_MATCH_TOLERANCE_METERS
       ) {
@@ -270,11 +270,11 @@ export class TripService {
           currentLocation: { type: 'Point', coordinates: coords },
           lastLocationUpdatedAt: receivedAt,
           lastGpsMeasuredAt: measuredAt,
-          routeProgressKm: newProgress,
           trackingStatus,
           lastGpsAccuracyMeters: accuracy,
           lastSequenceNumber: sequence,
         },
+        $max: { routeProgressKm: newProgress },
       },
       { new: true }
     );
@@ -285,7 +285,7 @@ export class TripService {
     return {
       tripId: updatedTrip._id,
       coordinates: coords,
-      routeProgressKm: newProgress,
+      routeProgressKm: updatedTrip.routeProgressKm,
       trackingStatus,
       lastLocationUpdatedAt: receivedAt,
     };

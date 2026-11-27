@@ -93,6 +93,8 @@ export const LiveTracking = () => {
 
   const bus = trip.busId;
   const route = trip.routeId;
+  const tripEnded =
+    isTripEnded || trip.status === 'COMPLETED' || trip.status === 'CANCELLED';
   const currentCoords =
     liveLocation ||
     (trip.status === 'ACTIVE' ? trip.currentLocation?.coordinates : null);
@@ -111,7 +113,7 @@ export const LiveTracking = () => {
           </div>
         )}
         {/* Warning if trip has ended */}
-        {isTripEnded && (
+        {tripEnded && (
           <div className="p-4 bg-[#FEE2E2] text-[#EF4444] rounded-xl border border-[#FECACA] flex items-center space-x-2 text-sm font-medium">
             <AlertTriangle size={18} />
             <span>The driver has ended this trip. Live tracking is no longer available.</span>
@@ -138,7 +140,7 @@ export const LiveTracking = () => {
           <div className="flex items-center space-x-2">
             <StatusBadge
               status={
-                isTripEnded
+                tripEnded
                   ? 'Trip Ended'
                   : trackingStatus !== 'ONLINE'
                     ? trackingStatus

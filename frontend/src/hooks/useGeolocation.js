@@ -168,7 +168,7 @@ export const useGeolocation = (options = {}) => {
 
   useEffect(() => {
     if (autoStart) {
-      startWatching();
+      queueMicrotask(startWatching);
     }
     return () => {
       if (watchIdRef.current !== null) {

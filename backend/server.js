@@ -10,19 +10,26 @@ const server = http.createServer(app);
 // Socket.IO configuration
 const io = new SocketIOServer(server, {
   cors: {
-    origin: [
-      ENV.CLIENT_URL,
-      'https://final-five-gray-53.vercel.app',
-      'http://localhost:5173',
-      'http://127.0.0.1:5173',
-    ].filter(Boolean),
+    origin: (origin, callback) => {
+      const allowedOrigins = [
+        ENV.CLIENT_URL,
+        'https://final-five-gray-53.vercel.app',
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
+      ].filter(Boolean);
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by Socket.IO CORS'));
+      }
+    },
     methods: ['GET', 'POST'],
     credentials: true,
   },
 });
 
 app.set('io', io);
-setupSocketIO(io);
+let watchdogTimer = null;
 
 const startServer = async () => {
   const connected = await connectDB();
@@ -31,6 +38,8 @@ const startServer = async () => {
     process.exitCode = 1;
     return;
   }
+
+  watchdogTimer = setupSocketIO(io);
 
   server.listen(ENV.PORT, () => {
     console.log(`[Server] Real-Time Public Transport Backend running on port ${ENV.PORT} (${ENV.NODE_ENV})`);
@@ -43,6 +52,7 @@ startServer();
 // Handle graceful shutdown
 process.on('SIGTERM', () => {
   console.log('[Server] SIGTERM received. Shutting down gracefully.');
+  if (watchdogTimer) clearInterval(watchdogTimer);
   server.close(() => {
     process.exit(0);
   });

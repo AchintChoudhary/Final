@@ -22,7 +22,7 @@ export const LocationAutocomplete = ({
   const [autocompleteError, setAutocompleteError] = useState('');
 
   useEffect(() => {
-    setQuery(value || '');
+    queueMicrotask(() => setQuery(value || ''));
   }, [value]);
 
   useEffect(() => {

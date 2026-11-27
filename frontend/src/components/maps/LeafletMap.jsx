@@ -120,7 +120,7 @@ export const LeafletMap = ({
         staticLayerRef.current = null;
       }
     };
-  }, []);
+  }, [center, zoom]);
 
   // Update Route Polyline & Static Markers (Fits bounds ONLY when route/stops change)
   useEffect(() => {
@@ -229,7 +229,7 @@ export const LeafletMap = ({
         mapInstanceRef.current.invalidateSize();
       }
     }, 150);
-  }, [routeCoordinates, origin, destination, stops, pickupLocation]);
+  }, [routeCoordinates, origin, destination, stops, pickupLocation, passengerDestination]);
 
   // Update Live Bus Marker smoothly WITHOUT resetting zoom or re-fitting bounds
   useEffect(() => {
